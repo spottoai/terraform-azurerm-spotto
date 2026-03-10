@@ -93,6 +93,26 @@ resource "azurerm_role_assignment" "reader" {
   depends_on = [time_sleep.sp_propagation]
 }
 
+resource "azurerm_role_assignment" "monitoring_reader" {
+  for_each             = var.enable_monitoring_reader ? toset(local.subscription_scopes) : toset([])
+  scope                = each.value
+  role_definition_name = "Monitoring Reader"
+  principal_id         = azuread_service_principal.spotto.object_id
+  skip_service_principal_aad_check = true
+
+  depends_on = [time_sleep.sp_propagation]
+}
+
+resource "azurerm_role_assignment" "log_analytics_data_reader" {
+  for_each             = var.enable_log_analytics_data_reader ? toset(local.subscription_scopes) : toset([])
+  scope                = each.value
+  role_definition_name = "Log Analytics Data Reader"
+  principal_id         = azuread_service_principal.spotto.object_id
+  skip_service_principal_aad_check = true
+
+  depends_on = [time_sleep.sp_propagation]
+}
+
 resource "azurerm_role_assignment" "management_group_reader" {
   count               = var.enable_management_group_reader ? 1 : 0
   scope                = local.management_group_scope

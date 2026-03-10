@@ -4,7 +4,7 @@ Terraform modules for onboarding Azure environments into Spotto.
 
 ## Modules
 
-- `modules/onboarding`: Creates an Azure AD application/service principal, assigns read access, grants Microsoft Graph permission to read application credentials, and optionally grants write access for Advisor/Storage Inventory actions.
+- `modules/onboarding`: Creates an Azure AD application/service principal, assigns read and monitoring access, grants Microsoft Graph permission to read application credentials, and optionally grants write access for Advisor/Storage Inventory actions.
 
 ## Requirements
 
@@ -17,7 +17,7 @@ Terraform modules for onboarding Azure environments into Spotto.
 ## Permissions Required
 
 - Azure AD: Application Administrator or Global Administrator to create the app and service principal.
-- Azure RBAC: Owner or User Access Administrator on each subscription to assign Reader.
+- Azure RBAC: Owner or User Access Administrator on each subscription to assign Reader, Monitoring Reader, and Log Analytics Data Reader.
 - Management Groups: Management Group Contributor or Owner if you want tenant-level assignments.
 - Microsoft Graph: Admin consent to grant Application.Read.All.
 
@@ -42,6 +42,11 @@ module "spotto_onboarding" {
 ```
 
 See `examples/onboarding-single` and `examples/onboarding-multiple` for complete examples.
+
+By default, the onboarding module also assigns:
+
+- `Monitoring Reader` on each targeted subscription for Azure Monitor and Application Insights read access.
+- `Log Analytics Data Reader` on each targeted subscription for Log Analytics query and table data read access.
 
 ## Outputs
 

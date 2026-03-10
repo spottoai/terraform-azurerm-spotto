@@ -70,6 +70,18 @@ variable "enable_savings_plan_reader" {
   default     = true
 }
 
+variable "enable_monitoring_reader" {
+  description = "Whether to assign Monitoring Reader on each targeted subscription."
+  type        = bool
+  default     = true
+}
+
+variable "enable_log_analytics_data_reader" {
+  description = "Whether to assign Log Analytics Data Reader on each targeted subscription."
+  type        = bool
+  default     = true
+}
+
 variable "enable_graph_permission" {
   description = "Whether to grant Microsoft Graph Application.Read.All permission."
   type        = bool
