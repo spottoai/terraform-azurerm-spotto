@@ -1,6 +1,6 @@
 # Onboarding Module
 
-Creates the Azure AD application and service principal used by Spotto, assigns read access to subscriptions, grants Microsoft Graph permission to read application credentials, and optionally grants write access for Advisor/Storage Inventory actions.
+Creates the Azure AD application and service principal used by Spotto, assigns read and monitoring access to subscriptions, grants Microsoft Graph permission to read application credentials, and optionally grants write access for Advisor/Storage Inventory actions.
 
 ## Spotto Links
 
@@ -27,10 +27,15 @@ module "spotto_onboarding" {
 }
 ```
 
+By default, the module also assigns:
+
+- `Monitoring Reader` on each targeted subscription for Azure Monitor and Application Insights read access.
+- `Log Analytics Data Reader` on each targeted subscription for Log Analytics query and table data read access.
+
 ## Permissions Required
 
 - Azure AD: Application Administrator or Global Administrator to create the app and service principal.
-- Azure RBAC: Owner or User Access Administrator on each subscription to assign Reader.
+- Azure RBAC: Owner or User Access Administrator on each subscription to assign Reader, Monitoring Reader, and Log Analytics Data Reader.
 - Management Groups: Management Group Contributor or Owner if you want tenant-level assignments.
 - Microsoft Graph: Admin consent to grant Application.Read.All.
 
@@ -60,6 +65,8 @@ provider "azuread" {}
 | `enable_management_group_reader` | Whether to assign Management Group Reader at the root management group. | `bool` | `true` | no |
 | `enable_reservations_reader` | Whether to assign Reservations Reader at the tenant level. | `bool` | `true` | no |
 | `enable_savings_plan_reader` | Whether to assign Savings Plan Reader at the tenant level. | `bool` | `true` | no |
+| `enable_monitoring_reader` | Whether to assign Monitoring Reader on each targeted subscription. | `bool` | `true` | no |
+| `enable_log_analytics_data_reader` | Whether to assign Log Analytics Data Reader on each targeted subscription. | `bool` | `true` | no |
 | `enable_graph_permission` | Whether to grant Microsoft Graph Application.Read.All permission. | `bool` | `true` | no |
 | `service_principal_propagation_delay` | Delay to allow the service principal to propagate before role assignments. Use `"0s"` to disable. | `string` | `"30s"` | no |
 | `custom_role_propagation_delay` | Delay to allow the custom role definition to propagate before assignments. Use `"0s"` to disable. | `string` | `"10s"` | no |
