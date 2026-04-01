@@ -30,7 +30,7 @@ output "client_secret_expiry" {
 }
 
 output "subscription_ids" {
-  description = "Subscription IDs targeted for Reader access."
+  description = "Subscription IDs resolved for the deployment. In tenant-wide Reader mode, this is the current subscription snapshot, not a limit on inherited root-scope access."
   value       = local.effective_subscription_ids
 }
 

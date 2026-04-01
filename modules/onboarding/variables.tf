@@ -1,11 +1,11 @@
 variable "assign_reader_to_all_subscriptions" {
-  description = "Whether to grant Reader access to all accessible subscriptions."
+  description = "Whether to grant Reader once at tenant root scope (/) so it inherits to all current and future subscriptions."
   type        = bool
   default     = false
 }
 
 variable "subscription_ids" {
-  description = "List of subscription IDs to grant Reader access."
+  description = "List of subscription IDs to grant Reader access. Ignored when assign_reader_to_all_subscriptions is true."
   type        = list(string)
   default     = []
 }
