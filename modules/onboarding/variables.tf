@@ -53,19 +53,19 @@ variable "client_secret_end_date" {
 }
 
 variable "enable_management_group_reader" {
-  description = "Whether to assign Management Group Reader at the root management group."
+  description = "Whether to assign Management Group Reader at the root management group for management group hierarchy and tenant governance metadata visibility."
   type        = bool
   default     = true
 }
 
 variable "enable_reservations_reader" {
-  description = "Whether to assign Reservations Reader at the tenant level."
+  description = "Whether to assign Reservations Reader at /providers/Microsoft.Capacity."
   type        = bool
   default     = true
 }
 
 variable "enable_savings_plan_reader" {
-  description = "Whether to assign Savings Plan Reader at the tenant level."
+  description = "Whether to assign Savings plan Reader at /providers/Microsoft.BillingBenefits."
   type        = bool
   default     = true
 }
@@ -76,14 +76,21 @@ variable "enable_monitoring_reader" {
   default     = true
 }
 
-variable "enable_log_analytics_data_reader" {
-  description = "Whether to assign Log Analytics Data Reader on each targeted subscription."
+variable "enable_log_analytics_reader" {
+  description = "Whether to assign Log Analytics Reader. When assign_reader_to_all_subscriptions is true, the module assigns it once at the root management group for tenant-wide workspace log access; otherwise it assigns it on each targeted subscription."
   type        = bool
   default     = true
 }
 
+variable "enable_log_analytics_data_reader" {
+  description = "Deprecated alias for enable_log_analytics_reader. When set, this value overrides enable_log_analytics_reader."
+  type        = bool
+  default     = null
+  nullable    = true
+}
+
 variable "enable_graph_permission" {
-  description = "Whether to grant Microsoft Graph Application.Read.All permission."
+  description = "Whether to grant Microsoft Graph Application.Read.All so Spotto can read applications and service principals for governance and credential posture."
   type        = bool
   default     = true
 }

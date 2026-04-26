@@ -4,7 +4,7 @@ Terraform modules for onboarding Azure environments into Spotto.
 
 ## Modules
 
-- `modules/onboarding`: Creates an Azure AD application/service principal, assigns read and monitoring access, grants Microsoft Graph permission to read application credentials, and optionally grants write access for Advisor/Storage Inventory actions.
+- `modules/onboarding`: Creates an Azure AD application/service principal, assigns subscription and tenant-level read access for Spotto onboarding and governance collection, grants Microsoft Graph `Application.Read.All` to read applications and service principals for governance and credential posture, optionally assigns Log Analytics Reader for broader workspace analysis, and optionally grants write access for Advisor/Storage Inventory actions.
 
 ## Requirements
 
@@ -19,11 +19,14 @@ Terraform modules for onboarding Azure environments into Spotto.
 
 - Azure AD: Application Administrator or Global Administrator to create the app and service principal.
 - Azure RBAC:
-  - If using `subscription_ids`, Owner or User Access Administrator on each target subscription to assign Reader, Monitoring Reader, and Log Analytics Data Reader.
-  - If using `assign_reader_to_all_subscriptions = true`, Owner or User Access Administrator at tenant root scope (`/`) to assign Reader once for the whole tenant.
+  - Reader on each target subscription when using `subscription_ids`, or Reader once at tenant root scope (`/`) when using `assign_reader_to_all_subscriptions = true`.
+  - Management Group Reader at the root management group for management group hierarchy visibility and tenant governance metadata coverage.
+  - Reservations Reader at `/providers/Microsoft.Capacity`.
+  - Savings plan Reader at `/providers/Microsoft.BillingBenefits`.
+  - Monitoring Reader and Log Analytics Reader are optional but recommended for Azure Monitor, Application Insights, and broader Log Analytics coverage.
   - Global Administrators typically need to enable `Microsoft Entra ID > Properties > Access management for Azure resources`, then sign out and sign back in before applying the tenant root Reader assignment.
-- Management Groups: Management Group Contributor or Owner if you want tenant-level assignments.
-- Microsoft Graph: Admin consent to grant Application.Read.All.
+- Management Groups: Management Group Contributor or Owner if you want to create the root management group assignment through the module.
+- Microsoft Graph: Admin consent to grant `Application.Read.All` so Spotto can read applications and service principals for governance and credential posture. This module does not require `Directory.Read.All`.
 
 ## Quickstart
 
@@ -51,8 +54,8 @@ future subscriptions in the tenant. The module still enumerates currently visibl
 subscriptions for outputs and for any optional per-subscription custom role assignments.
 
 If you want the apply to succeed with tenant-root RBAC only, disable the default
-subscription-scoped monitoring assignments and any optional provider-scope
-assignments you cannot create.
+subscription-scoped monitoring assignments, any management-group-scoped roles you
+cannot create, and any optional provider-scope assignments you cannot create.
 
 ```hcl
 module "spotto_onboarding" {
@@ -60,7 +63,7 @@ module "spotto_onboarding" {
 
   assign_reader_to_all_subscriptions    = true
   enable_monitoring_reader              = false
-  enable_log_analytics_data_reader      = false
+  enable_log_analytics_reader           = false
   enable_reservations_reader            = false
   enable_savings_plan_reader            = false
 }
@@ -68,8 +71,9 @@ module "spotto_onboarding" {
 
 By default, tenant-wide Reader mode still assigns:
 
+- `Management Group Reader` at the root management group.
 - `Monitoring Reader` on each currently resolved subscription.
-- `Log Analytics Data Reader` on each currently resolved subscription.
+- `Log Analytics Reader` at the root management group.
 - `Reservations Reader` at `/providers/Microsoft.Capacity`.
 - `Savings plan Reader` at `/providers/Microsoft.BillingBenefits`.
 
@@ -78,8 +82,12 @@ See `examples/onboarding-single`, `examples/onboarding-multiple`, and
 
 By default, the onboarding module also assigns:
 
+- `Management Group Reader` at the root management group for management group hierarchy and tenant governance metadata.
 - `Monitoring Reader` on each targeted subscription for Azure Monitor and Application Insights read access.
-- `Log Analytics Data Reader` on each targeted subscription for Log Analytics query and table data read access.
+- `Log Analytics Reader` at the root management group when onboarding all subscriptions, otherwise on each targeted subscription, for broader workspace log analysis.
+- `Reservations Reader` at `/providers/Microsoft.Capacity`.
+- `Savings plan Reader` at `/providers/Microsoft.BillingBenefits`.
+- Microsoft Graph `Application.Read.All` with admin consent to read applications and service principals for governance and credential posture.
 
 ## Outputs
 
@@ -108,9 +116,11 @@ Use a remote backend that supports encryption and access controls (for example, 
 
 - Role assignment failures right after apply may indicate Azure AD propagation delays. Re-run `terraform apply` or increase `service_principal_propagation_delay`.
 - If the root-scope Reader assignment fails when `assign_reader_to_all_subscriptions = true`, ensure you have Owner or User Access Administrator at `/`. If you are a Global Administrator, enable `Access management for Azure resources` in Microsoft Entra ID, sign out, sign back in, and re-run `terraform apply`.
-- If `Monitoring Reader` or `Log Analytics Data Reader` assignments fail in tenant-wide mode, you still need permission to create subscription-level RBAC assignments on the currently resolved subscriptions, or set `enable_monitoring_reader = false` and `enable_log_analytics_data_reader = false`.
+- If `Management Group Reader` assignment fails, ensure you can create RBAC assignments on the root management group, or set `enable_management_group_reader = false`.
+- If `Monitoring Reader` assignments fail in tenant-wide mode, you still need permission to create subscription-level RBAC assignments on the currently resolved subscriptions, or set `enable_monitoring_reader = false`.
+- If `Log Analytics Reader` assignment fails in tenant-wide mode, ensure you can create RBAC assignments on the root management group, or set `enable_log_analytics_reader = false`.
 - If `Reservations Reader` or `Savings plan Reader` assignments fail, ensure you can create RBAC assignments at `/providers/Microsoft.Capacity` and `/providers/Microsoft.BillingBenefits`, or disable them with `enable_reservations_reader = false` and `enable_savings_plan_reader = false`.
-- If Microsoft Graph permission grants fail, ensure admin consent is allowed for Application.Read.All in your tenant.
+- If Microsoft Graph permission grants fail, ensure admin consent is allowed for `Application.Read.All` in your tenant. The module intentionally does not request `Directory.Read.All`.
 
 ## License
 

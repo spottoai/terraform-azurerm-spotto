@@ -31,6 +31,7 @@ locals {
   all_subscription_ids         = var.assign_reader_to_all_subscriptions ? [for sub in data.azurerm_subscriptions.current[0].subscriptions : sub.subscription_id] : []
   effective_subscription_ids   = var.assign_reader_to_all_subscriptions ? local.all_subscription_ids : var.subscription_ids
   subscription_scopes          = [for id in local.effective_subscription_ids : "/subscriptions/${id}"]
+  enable_log_analytics_reader  = var.enable_log_analytics_data_reader != null ? var.enable_log_analytics_data_reader : var.enable_log_analytics_reader
   graph_app_role_id            = var.enable_graph_permission ? one([for role in data.azuread_service_principal.msgraph[0].app_roles : role.id if role.value == "Application.Read.All" && contains(role.allowed_member_types, "Application")]) : null
   custom_role_scope            = local.subscription_scopes[0]
   secret_end_date              = var.client_secret_end_date != null ? var.client_secret_end_date : (var.create_client_secret ? timeadd(time_static.secret_created[0].rfc3339, "8760h") : null)
@@ -138,10 +139,30 @@ resource "azurerm_role_assignment" "monitoring_reader" {
   depends_on = [time_sleep.sp_propagation]
 }
 
-resource "azurerm_role_assignment" "log_analytics_data_reader" {
-  for_each                         = var.enable_log_analytics_data_reader ? toset(local.subscription_scopes) : toset([])
+resource "azurerm_role_assignment" "log_analytics_reader_subscription" {
+  for_each                         = local.enable_log_analytics_reader && !var.assign_reader_to_all_subscriptions ? toset(local.subscription_scopes) : toset([])
   scope                            = each.value
-  role_definition_name             = "Log Analytics Data Reader"
+  role_definition_name             = "Log Analytics Reader"
+  principal_id                     = azuread_service_principal.spotto.object_id
+  skip_service_principal_aad_check = true
+
+  depends_on = [time_sleep.sp_propagation]
+}
+
+resource "azurerm_role_assignment" "log_analytics_reader_management_group" {
+  count                            = local.enable_log_analytics_reader && var.assign_reader_to_all_subscriptions ? 1 : 0
+  scope                            = local.management_group_scope
+  role_definition_name             = "Log Analytics Reader"
+  principal_id                     = azuread_service_principal.spotto.object_id
+  skip_service_principal_aad_check = true
+
+  depends_on = [time_sleep.sp_propagation]
+}
+
+resource "azurerm_role_assignment" "reader_management_group" {
+  count                            = var.enable_management_group_reader ? 1 : 0
+  scope                            = local.management_group_scope
+  role_definition_name             = "Reader"
   principal_id                     = azuread_service_principal.spotto.object_id
   skip_service_principal_aad_check = true
 
