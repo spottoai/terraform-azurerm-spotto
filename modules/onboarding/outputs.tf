@@ -43,3 +43,33 @@ output "custom_role_definition_id" {
   description = "Role definition resource ID for the optional custom role."
   value       = try(azurerm_role_definition.spotto_write[0].role_definition_resource_id, null)
 }
+
+output "billing_exports_enabled" {
+  description = "Whether Cost Management billing exports were enabled."
+  value       = var.enable_billing_exports
+}
+
+output "billing_export_storage_account_id" {
+  description = "Storage account resource ID used for billing exports."
+  value       = local.billing_export_storage_account_id
+}
+
+output "billing_export_storage_subscription_id" {
+  description = "Subscription ID used for module-created billing export storage."
+  value       = var.enable_billing_exports && var.create_billing_export_storage_account ? local.billing_export_storage_subscription_id : null
+}
+
+output "billing_export_container_id" {
+  description = "Blob container resource ID used for billing exports."
+  value       = try(azapi_resource.billing_export_container[0].id, null)
+}
+
+output "billing_export_recurring_export_ids" {
+  description = "Cost Management recurring export resource IDs keyed by subscription ID and dataset type."
+  value       = { for key, export in azapi_resource.billing_export_recurring : key => export.id }
+}
+
+output "billing_export_backfill_export_ids" {
+  description = "Cost Management backfill export resource IDs keyed by subscription ID, dataset type, and period."
+  value       = { for key, export in azapi_resource.billing_export_backfill : key => export.id }
+}

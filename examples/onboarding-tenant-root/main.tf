@@ -10,6 +10,11 @@ module "spotto_onboarding" {
   enable_monitoring_reader   = false
   enable_reservations_reader = false
   enable_savings_plan_reader = false
+
+  # Optional, highly recommended. In tenant-wide Reader mode this creates exports
+  # for the current subscription snapshot; rerun Terraform after adding future
+  # subscriptions.
+  # enable_billing_exports = true
 }
 
 output "application_client_id" {

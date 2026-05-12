@@ -7,6 +7,11 @@ module "spotto_onboarding" {
   source = "../../modules/onboarding"
 
   subscription_ids = var.subscription_ids
+
+  # Optional, highly recommended: create Cost Management exports to customer-owned
+  # Azure Storage so Spotto can read billing data from exports instead of making
+  # repeated Cost Management API calls.
+  # enable_billing_exports = true
 }
 
 output "application_client_id" {
