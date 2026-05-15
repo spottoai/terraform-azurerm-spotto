@@ -125,13 +125,13 @@ variable "manage_billing_export_storage_account_settings" {
 }
 
 variable "billing_export_storage_subscription_id" {
-  description = "Subscription ID where the module-created billing export storage account should be created. Defaults to the first targeted subscription, or the current provider subscription when tenant-wide mode resolves no subscriptions."
+  description = "Subscription ID for the billing export storage host. Defaults to the first targeted subscription when creating storage, or the subscription parsed from billing_export_storage_account_id when using existing storage."
   type        = string
   default     = null
 }
 
 variable "enable_billing_export_resource_provider_registration" {
-  description = "Whether to request Microsoft.CostManagement registration on targeted subscriptions, plus Microsoft.Storage on the storage host subscription when creating export storage."
+  description = "Whether to request Microsoft.CostManagement registration on targeted subscriptions; Microsoft.CostManagement, Microsoft.CostManagementExports, and optionally Microsoft.Storage on the storage host subscription."
   type        = bool
   default     = true
 }

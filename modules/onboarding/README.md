@@ -73,8 +73,8 @@ module "spotto_onboarding" {
 
 When enabled, the module:
 
-- Creates a storage account in `billing_export_resource_group_name`, or uses `billing_export_storage_account_id`. Module-created storage is created in the first targeted subscription by default; set `billing_export_storage_subscription_id` to choose a different storage host subscription.
-- Requests `Microsoft.CostManagement` provider registration on targeted subscriptions and `Microsoft.Storage` provider registration on the storage host subscription by default.
+- Creates a storage account in `billing_export_resource_group_name`, or uses `billing_export_storage_account_id`. Module-created storage is created in the first targeted subscription by default; set `billing_export_storage_subscription_id` to choose a different storage host subscription. Existing storage defaults to the subscription parsed from `billing_export_storage_account_id`.
+- Requests `Microsoft.CostManagement` provider registration on targeted subscriptions, plus `Microsoft.CostManagement` and `Microsoft.CostManagementExports` registration on the storage host subscription by default. It also registers `Microsoft.Storage` on the storage host subscription when creating export storage.
 - Enforces storage account settings required for Spotto exports by default, including TLS 1.2, HTTPS-only traffic, public network access, Azure services bypass, and disabled anonymous blob access.
 - Ensures a private blob container named `billing_export_container_name`.
 - Assigns `Storage Blob Data Reader` to the Spotto service principal at the container scope.
@@ -135,8 +135,8 @@ provider "azuread" {}
 | `create_billing_export_storage_account` | Whether to create a storage account for billing exports. When false, `billing_export_storage_account_id` must be provided if billing exports are enabled. | `bool` | `true` | no |
 | `billing_export_storage_account_id` | Existing storage account resource ID to use for billing exports when `create_billing_export_storage_account` is false. | `string` | `null` | no |
 | `manage_billing_export_storage_account_settings` | Whether to enforce billing export storage account settings such as TLS 1.2, HTTPS-only traffic, public network access, Azure services bypass, and disabled anonymous blob access. | `bool` | `true` | no |
-| `billing_export_storage_subscription_id` | Subscription ID where the module-created billing export storage account should be created. Defaults to the first targeted subscription, or the current provider subscription when tenant-wide mode resolves no subscriptions. | `string` | `null` | no |
-| `enable_billing_export_resource_provider_registration` | Whether to request `Microsoft.CostManagement` registration on targeted subscriptions, plus `Microsoft.Storage` on the storage host subscription when creating export storage. | `bool` | `true` | no |
+| `billing_export_storage_subscription_id` | Subscription ID for the billing export storage host. Defaults to the first targeted subscription when creating storage, or the subscription parsed from `billing_export_storage_account_id` when using existing storage. | `string` | `null` | no |
+| `enable_billing_export_resource_provider_registration` | Whether to request `Microsoft.CostManagement` registration on targeted subscriptions; `Microsoft.CostManagement`, `Microsoft.CostManagementExports`, and optionally `Microsoft.Storage` on the storage host subscription. | `bool` | `true` | no |
 | `billing_export_resource_group_name` | Resource group name for the module-created billing export storage account. | `string` | `"rg-spotto-cost-exports"` | no |
 | `billing_export_location` | Azure region for the module-created billing export resource group and storage account. | `string` | `"australiaeast"` | no |
 | `billing_export_storage_account_name` | Optional name for the module-created billing export storage account. Defaults to a generated Spotto-prefixed name. | `string` | `null` | no |
