@@ -13,7 +13,7 @@ variable "subscription_ids" {
 variable "app_name" {
   description = "Display name for the Azure AD application."
   type        = string
-  default     = "Spotto AI"
+  default     = "Spotto"
 }
 
 variable "custom_role_name" {
@@ -60,6 +60,12 @@ variable "enable_management_group_reader" {
 
 variable "enable_reservations_reader" {
   description = "Whether to assign Reservations Reader at /providers/Microsoft.Capacity."
+  type        = bool
+  default     = true
+}
+
+variable "enable_reservations_contributor" {
+  description = "Whether to assign Reservations Contributor at /providers/Microsoft.Capacity for reservation refund quotes and management workflows."
   type        = bool
   default     = true
 }

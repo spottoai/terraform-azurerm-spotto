@@ -45,6 +45,7 @@ module "spotto_onboarding" {
   enable_log_analytics_reader      = false
   enable_management_group_reader   = false
   enable_reservations_reader       = false
+  enable_reservations_contributor  = false
   enable_savings_plan_reader       = false
 }
 ```
@@ -56,6 +57,7 @@ By default, the module also assigns:
 - `Monitoring Reader` on each targeted subscription for Azure Monitor and Application Insights read access.
 - `Log Analytics Reader` at the root management group when onboarding all subscriptions, otherwise on each targeted subscription, for broader workspace log analysis.
 - `Reservations Reader` at `/providers/Microsoft.Capacity`.
+- `Reservations Contributor` at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows.
 - `Savings plan Reader` at `/providers/Microsoft.BillingBenefits`.
 - Microsoft Graph `Application.Read.All` with admin consent to read applications and service principals for governance and credential posture.
 
@@ -91,6 +93,7 @@ The PowerShell onboarding wizard can interactively discover arbitrary compatible
   - Reader at the root management group for tenant governance hierarchy access.
   - Management Group Reader at the root management group for management group hierarchy visibility and tenant governance metadata coverage.
   - Reservations Reader at `/providers/Microsoft.Capacity`.
+  - Reservations Contributor at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows.
   - Savings plan Reader at `/providers/Microsoft.BillingBenefits`.
   - Monitoring Reader and Log Analytics Reader are optional but recommended for Azure Monitor, Application Insights, and broader Log Analytics coverage.
   - Global Administrators typically need to enable `Microsoft Entra ID > Properties > Access management for Azure resources`, then sign out and sign back in before applying the tenant root Reader assignment.
@@ -117,7 +120,7 @@ provider "azuread" {}
 |------|-------------|------|---------|:--------:|
 | `assign_reader_to_all_subscriptions` | Whether to grant Reader once at tenant root scope (`/`) so it inherits to all current and future subscriptions. | `bool` | `false` | no |
 | `subscription_ids` | List of subscription IDs to grant Reader access. Ignored when `assign_reader_to_all_subscriptions` is `true`. | `list(string)` | `[]` | no |
-| `app_name` | Display name for the Azure AD application. | `string` | `"Spotto AI"` | no |
+| `app_name` | Display name for the Azure AD application. | `string` | `"Spotto"` | no |
 | `custom_role_name` | Name for the optional custom role used for write permissions. | `string` | `"Spotto Access"` | no |
 | `grant_optional_write_permissions` | Whether to create and assign the optional custom role. | `bool` | `false` | no |
 | `tenant_id` | Optional tenant ID override. Defaults to the current client tenant. | `string` | `null` | no |
@@ -126,6 +129,7 @@ provider "azuread" {}
 | `client_secret_end_date` | Optional RFC3339 timestamp to set the client secret expiration. Defaults to 12 months from creation. | `string` | `null` | no |
 | `enable_management_group_reader` | Whether to assign Management Group Reader at the root management group. | `bool` | `true` | no |
 | `enable_reservations_reader` | Whether to assign Reservations Reader at `/providers/Microsoft.Capacity`. | `bool` | `true` | no |
+| `enable_reservations_contributor` | Whether to assign Reservations Contributor at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows. | `bool` | `true` | no |
 | `enable_savings_plan_reader` | Whether to assign Savings plan Reader at `/providers/Microsoft.BillingBenefits`. | `bool` | `true` | no |
 | `enable_monitoring_reader` | Whether to assign Monitoring Reader on each targeted subscription. | `bool` | `true` | no |
 | `enable_log_analytics_reader` | Whether to assign Log Analytics Reader. When `assign_reader_to_all_subscriptions` is `true`, the module assigns it once at the root management group for tenant-wide workspace log access; otherwise it assigns it on each targeted subscription. | `bool` | `true` | no |

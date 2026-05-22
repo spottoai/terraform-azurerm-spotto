@@ -12,6 +12,10 @@ data "azurerm_role_definition" "reservations_reader" {
   name = "Reservations Reader"
 }
 
+data "azurerm_role_definition" "reservations_contributor" {
+  name = "Reservations Contributor"
+}
+
 data "azurerm_role_definition" "savings_plan_reader" {
   name = "Savings plan Reader"
 }
@@ -22,25 +26,27 @@ data "azuread_service_principal" "msgraph" {
 }
 
 locals {
-  tenant_id                              = coalesce(var.tenant_id, data.azurerm_client_config.current.tenant_id)
-  tenant_root_scope                      = "/"
-  reservations_scope                     = "/providers/Microsoft.Capacity"
-  savings_plan_scope                     = "/providers/Microsoft.BillingBenefits"
-  management_group_id                    = coalesce(var.root_management_group_id, local.tenant_id)
-  management_group_scope                 = "/providers/Microsoft.Management/managementGroups/${local.management_group_id}"
-  all_subscription_ids                   = var.assign_reader_to_all_subscriptions ? [for sub in data.azurerm_subscriptions.current[0].subscriptions : sub.subscription_id] : []
-  effective_subscription_ids             = var.assign_reader_to_all_subscriptions ? local.all_subscription_ids : var.subscription_ids
-  subscription_scopes                    = [for id in local.effective_subscription_ids : "/subscriptions/${id}"]
-  enable_log_analytics_reader            = var.enable_log_analytics_data_reader != null ? var.enable_log_analytics_data_reader : var.enable_log_analytics_reader
-  graph_app_role_id                      = var.enable_graph_permission ? one([for role in data.azuread_service_principal.msgraph[0].app_roles : role.id if role.value == "Application.Read.All" && contains(role.allowed_member_types, "Application")]) : null
-  custom_role_scope                      = local.subscription_scopes[0]
-  secret_end_date                        = var.client_secret_end_date != null ? var.client_secret_end_date : (var.create_client_secret ? timeadd(time_static.secret_created[0].rfc3339, "8760h") : null)
-  reader_role_definition_id              = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reader.role_definition_id}"
-  reservations_reader_role_definition_id = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reservations_reader.role_definition_id}"
-  savings_plan_reader_role_definition_id = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.savings_plan_reader.role_definition_id}"
-  root_reader_assignment_name            = uuidv5("url", "${local.tenant_root_scope}|${local.reader_role_definition_id}|${azuread_service_principal.spotto.object_id}")
-  reservations_assignment_name           = uuidv5("url", "${local.reservations_scope}|${local.reservations_reader_role_definition_id}|${azuread_service_principal.spotto.object_id}")
-  savings_plan_assignment_name           = uuidv5("url", "${local.savings_plan_scope}|${local.savings_plan_reader_role_definition_id}|${azuread_service_principal.spotto.object_id}")
+  tenant_id                                   = coalesce(var.tenant_id, data.azurerm_client_config.current.tenant_id)
+  tenant_root_scope                           = "/"
+  reservations_scope                          = "/providers/Microsoft.Capacity"
+  savings_plan_scope                          = "/providers/Microsoft.BillingBenefits"
+  management_group_id                         = coalesce(var.root_management_group_id, local.tenant_id)
+  management_group_scope                      = "/providers/Microsoft.Management/managementGroups/${local.management_group_id}"
+  all_subscription_ids                        = var.assign_reader_to_all_subscriptions ? [for sub in data.azurerm_subscriptions.current[0].subscriptions : sub.subscription_id] : []
+  effective_subscription_ids                  = var.assign_reader_to_all_subscriptions ? local.all_subscription_ids : var.subscription_ids
+  subscription_scopes                         = [for id in local.effective_subscription_ids : "/subscriptions/${id}"]
+  enable_log_analytics_reader                 = var.enable_log_analytics_data_reader != null ? var.enable_log_analytics_data_reader : var.enable_log_analytics_reader
+  graph_app_role_id                           = var.enable_graph_permission ? one([for role in data.azuread_service_principal.msgraph[0].app_roles : role.id if role.value == "Application.Read.All" && contains(role.allowed_member_types, "Application")]) : null
+  custom_role_scope                           = local.subscription_scopes[0]
+  secret_end_date                             = var.client_secret_end_date != null ? var.client_secret_end_date : (var.create_client_secret ? timeadd(time_static.secret_created[0].rfc3339, "8760h") : null)
+  reader_role_definition_id                   = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reader.role_definition_id}"
+  reservations_reader_role_definition_id      = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reservations_reader.role_definition_id}"
+  reservations_contributor_role_definition_id = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reservations_contributor.role_definition_id}"
+  savings_plan_reader_role_definition_id      = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.savings_plan_reader.role_definition_id}"
+  root_reader_assignment_name                 = uuidv5("url", "${local.tenant_root_scope}|${local.reader_role_definition_id}|${azuread_service_principal.spotto.object_id}")
+  reservations_assignment_name                = uuidv5("url", "${local.reservations_scope}|${local.reservations_reader_role_definition_id}|${azuread_service_principal.spotto.object_id}")
+  reservations_contributor_assignment_name    = uuidv5("url", "${local.reservations_scope}|${local.reservations_contributor_role_definition_id}|${azuread_service_principal.spotto.object_id}")
+  savings_plan_assignment_name                = uuidv5("url", "${local.savings_plan_scope}|${local.savings_plan_reader_role_definition_id}|${azuread_service_principal.spotto.object_id}")
   billing_export_dataset_config = {
     ActualCost = {
       definition_type       = var.billing_export_actual_cost_definition_type
@@ -544,6 +550,23 @@ resource "azapi_resource" "reservations_reader" {
       principalId      = azuread_service_principal.spotto.object_id
       principalType    = "ServicePrincipal"
       roleDefinitionId = local.reservations_reader_role_definition_id
+    }
+  }
+
+  depends_on = [time_sleep.sp_propagation]
+}
+
+resource "azapi_resource" "reservations_contributor" {
+  count     = var.enable_reservations_contributor ? 1 : 0
+  type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
+  name      = local.reservations_contributor_assignment_name
+  parent_id = local.reservations_scope
+
+  body = {
+    properties = {
+      principalId      = azuread_service_principal.spotto.object_id
+      principalType    = "ServicePrincipal"
+      roleDefinitionId = local.reservations_contributor_role_definition_id
     }
   }
 

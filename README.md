@@ -22,6 +22,7 @@ Terraform modules for onboarding Azure environments into Spotto.
   - Reader on each target subscription when using `subscription_ids`, or Reader once at tenant root scope (`/`) when using `assign_reader_to_all_subscriptions = true`.
   - Management Group Reader at the root management group for management group hierarchy visibility and tenant governance metadata coverage.
   - Reservations Reader at `/providers/Microsoft.Capacity`.
+  - Reservations Contributor at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows.
   - Savings plan Reader at `/providers/Microsoft.BillingBenefits`.
   - Monitoring Reader and Log Analytics Reader are optional but recommended for Azure Monitor, Application Insights, and broader Log Analytics coverage.
   - Cost Management export setup, when enabled, requires permission to create/update `Microsoft.CostManagement/exports` on each targeted subscription.
@@ -67,6 +68,7 @@ module "spotto_onboarding" {
   enable_monitoring_reader              = false
   enable_log_analytics_reader           = false
   enable_reservations_reader            = false
+  enable_reservations_contributor       = false
   enable_savings_plan_reader            = false
 }
 ```
@@ -77,6 +79,7 @@ By default, tenant-wide Reader mode still assigns:
 - `Monitoring Reader` on each currently resolved subscription.
 - `Log Analytics Reader` at the root management group.
 - `Reservations Reader` at `/providers/Microsoft.Capacity`.
+- `Reservations Contributor` at `/providers/Microsoft.Capacity`.
 - `Savings plan Reader` at `/providers/Microsoft.BillingBenefits`.
 
 See `examples/onboarding-single`, `examples/onboarding-multiple`, and
@@ -88,6 +91,7 @@ By default, the onboarding module also assigns:
 - `Monitoring Reader` on each targeted subscription for Azure Monitor and Application Insights read access.
 - `Log Analytics Reader` at the root management group when onboarding all subscriptions, otherwise on each targeted subscription, for broader workspace log analysis.
 - `Reservations Reader` at `/providers/Microsoft.Capacity`.
+- `Reservations Contributor` at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows.
 - `Savings plan Reader` at `/providers/Microsoft.BillingBenefits`.
 - Microsoft Graph `Application.Read.All` with admin consent to read applications and service principals for governance and credential posture.
 
@@ -141,7 +145,7 @@ Use a remote backend that supports encryption and access controls (for example, 
 - If `Management Group Reader` assignment fails, ensure you can create RBAC assignments on the root management group, or set `enable_management_group_reader = false`.
 - If `Monitoring Reader` assignments fail in tenant-wide mode, you still need permission to create subscription-level RBAC assignments on the currently resolved subscriptions, or set `enable_monitoring_reader = false`.
 - If `Log Analytics Reader` assignment fails in tenant-wide mode, ensure you can create RBAC assignments on the root management group, or set `enable_log_analytics_reader = false`.
-- If `Reservations Reader` or `Savings plan Reader` assignments fail, ensure you can create RBAC assignments at `/providers/Microsoft.Capacity` and `/providers/Microsoft.BillingBenefits`, or disable them with `enable_reservations_reader = false` and `enable_savings_plan_reader = false`.
+- If `Reservations Reader`, `Reservations Contributor`, or `Savings plan Reader` assignments fail, ensure you can create RBAC assignments at `/providers/Microsoft.Capacity` and `/providers/Microsoft.BillingBenefits`, or disable them with `enable_reservations_reader = false`, `enable_reservations_contributor = false`, and `enable_savings_plan_reader = false`.
 - If Microsoft Graph permission grants fail, ensure admin consent is allowed for `Application.Read.All` in your tenant. The module intentionally does not request `Directory.Read.All`.
 - If Cost Management exports fail with unsupported dataset or partitioning errors, remove `AmortizedCost` from `billing_export_dataset_types`, set `billing_export_actual_cost_definition_type = "Usage"` for agreements/scopes that do not support `ActualCost`, or set `billing_export_partition_data = false`.
 - If billing export storage access fails, confirm the storage account allows public network access with authenticated access, anonymous blob access is disabled, the container is private, and the Spotto service principal has `Storage Blob Data Reader` on the export container.
