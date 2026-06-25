@@ -1,6 +1,6 @@
 # Onboarding Module
 
-Creates the Azure AD application and service principal used by Spotto, assigns subscription and tenant-level read access for onboarding and governance collection, grants Microsoft Graph `Application.Read.All` to read applications and service principals for governance and credential posture, can configure Cost Management exports to customer-owned Azure Storage, and optionally grants write access for Advisor/Storage Inventory actions.
+Creates the Azure AD application and service principal used by Spotto, assigns subscription and tenant-level read access for onboarding and governance collection, grants Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility, can configure Cost Management exports to customer-owned Azure Storage, and optionally grants write access for Advisor/Storage Inventory actions.
 
 ## Spotto Links
 
@@ -59,7 +59,14 @@ By default, the module also assigns:
 - `Reservations Reader` at `/providers/Microsoft.Capacity`.
 - `Reservations Contributor` at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows.
 - `Savings plan Reader` at `/providers/Microsoft.BillingBenefits`.
-- Microsoft Graph `Application.Read.All` with admin consent to read applications and service principals for governance and credential posture.
+- Microsoft Graph application permissions with admin consent:
+  - `Application.Read.All`
+  - `RoleAssignmentSchedule.Read.Directory`
+  - `RoleEligibilitySchedule.Read.Directory`
+  - `RoleManagement.Read.Directory`
+  - `GroupMember.Read.All`
+  - `User.Read.All`
+  - `AuditLog.Read.All`
 
 Billing export setup is opt-in to avoid creating storage/export resources for existing users:
 
@@ -98,7 +105,7 @@ The PowerShell onboarding wizard can interactively discover arbitrary compatible
   - Monitoring Reader and Log Analytics Reader are optional but recommended for Azure Monitor, Application Insights, and broader Log Analytics coverage.
   - Global Administrators typically need to enable `Microsoft Entra ID > Properties > Access management for Azure resources`, then sign out and sign back in before applying the tenant root Reader assignment.
 - Management Groups: Management Group Contributor or Owner if you want to create the root management group assignment through the module.
-- Microsoft Graph: Admin consent to grant `Application.Read.All` so Spotto can read applications and service principals for governance and credential posture. This module does not require `Directory.Read.All`.
+- Microsoft Graph: Admin consent to grant application permissions for application inventory, Entra Global Admin/PIM visibility, group membership, user profile, and audit log visibility. This module does not require `Directory.Read.All`.
 - Cost Management exports: Permission to create/update `Microsoft.CostManagement/exports` on each targeted subscription when `enable_billing_exports = true`.
 - Billing export storage: Permission to create or use the selected storage account/container and assign `Storage Blob Data Reader` at the container scope when `enable_billing_exports = true`.
 
@@ -134,7 +141,7 @@ provider "azuread" {}
 | `enable_monitoring_reader` | Whether to assign Monitoring Reader on each targeted subscription. | `bool` | `true` | no |
 | `enable_log_analytics_reader` | Whether to assign Log Analytics Reader. When `assign_reader_to_all_subscriptions` is `true`, the module assigns it once at the root management group for tenant-wide workspace log access; otherwise it assigns it on each targeted subscription. | `bool` | `true` | no |
 | `enable_log_analytics_data_reader` | Deprecated alias for `enable_log_analytics_reader`. When set, this value overrides the new variable. | `bool` | `null` | no |
-| `enable_graph_permission` | Whether to grant Microsoft Graph `Application.Read.All` with admin consent so Spotto can read applications and service principals for governance and credential posture. | `bool` | `true` | no |
+| `enable_graph_permission` | Whether to grant Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility. | `bool` | `true` | no |
 | `enable_billing_exports` | Whether to configure Cost Management billing exports to Azure Storage for the targeted subscriptions. | `bool` | `false` | no |
 | `create_billing_export_storage_account` | Whether to create a storage account for billing exports. When false, `billing_export_storage_account_id` must be provided if billing exports are enabled. | `bool` | `true` | no |
 | `billing_export_storage_account_id` | Existing storage account resource ID to use for billing exports when `create_billing_export_storage_account` is false. | `string` | `null` | no |
@@ -183,7 +190,7 @@ provider "azuread" {}
 - If you already have an application or custom role, import it instead of creating a duplicate.
 - The optional write-permission custom role remains per-subscription even when `assign_reader_to_all_subscriptions = true`.
 - If tenant-wide Reader mode is enabled, `subscription_ids` remains a snapshot of currently resolved subscriptions used by subscription-scoped assignments and outputs.
-- The module requests Microsoft Graph `Application.Read.All` for application and service principal inventory only. It does not widen to `Directory.Read.All`.
+- The module requests the Microsoft Graph application permissions listed above for application inventory, Entra Global Admin/PIM visibility, group membership, user profile, and audit log visibility. It does not widen to `Directory.Read.All`.
 - If `enable_billing_exports = true` with tenant-wide Reader mode, export resources are created for the current subscription snapshot; rerun Terraform after new subscriptions are added.
 - Existing Cost Management exports with the same names should be imported into Terraform state before apply. The module does not interactively adopt arbitrary exports.
 - Billing export storage is configured with TLS 1.2, HTTPS-only traffic, anonymous blob access disabled, public network access enabled, and Azure services network bypass when `manage_billing_export_storage_account_settings = true`.

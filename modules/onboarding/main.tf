@@ -26,17 +26,35 @@ data "azuread_service_principal" "msgraph" {
 }
 
 locals {
-  tenant_id                                   = coalesce(var.tenant_id, data.azurerm_client_config.current.tenant_id)
-  tenant_root_scope                           = "/"
-  reservations_scope                          = "/providers/Microsoft.Capacity"
-  savings_plan_scope                          = "/providers/Microsoft.BillingBenefits"
-  management_group_id                         = coalesce(var.root_management_group_id, local.tenant_id)
-  management_group_scope                      = "/providers/Microsoft.Management/managementGroups/${local.management_group_id}"
-  all_subscription_ids                        = var.assign_reader_to_all_subscriptions ? [for sub in data.azurerm_subscriptions.current[0].subscriptions : sub.subscription_id] : []
-  effective_subscription_ids                  = var.assign_reader_to_all_subscriptions ? local.all_subscription_ids : var.subscription_ids
-  subscription_scopes                         = [for id in local.effective_subscription_ids : "/subscriptions/${id}"]
-  enable_log_analytics_reader                 = var.enable_log_analytics_data_reader != null ? var.enable_log_analytics_data_reader : var.enable_log_analytics_reader
-  graph_app_role_id                           = var.enable_graph_permission ? one([for role in data.azuread_service_principal.msgraph[0].app_roles : role.id if role.value == "Application.Read.All" && contains(role.allowed_member_types, "Application")]) : null
+  tenant_id                   = coalesce(var.tenant_id, data.azurerm_client_config.current.tenant_id)
+  tenant_root_scope           = "/"
+  reservations_scope          = "/providers/Microsoft.Capacity"
+  savings_plan_scope          = "/providers/Microsoft.BillingBenefits"
+  management_group_id         = coalesce(var.root_management_group_id, local.tenant_id)
+  management_group_scope      = "/providers/Microsoft.Management/managementGroups/${local.management_group_id}"
+  all_subscription_ids        = var.assign_reader_to_all_subscriptions ? [for sub in data.azurerm_subscriptions.current[0].subscriptions : sub.subscription_id] : []
+  effective_subscription_ids  = var.assign_reader_to_all_subscriptions ? local.all_subscription_ids : var.subscription_ids
+  subscription_scopes         = [for id in local.effective_subscription_ids : "/subscriptions/${id}"]
+  enable_log_analytics_reader = var.enable_log_analytics_data_reader != null ? var.enable_log_analytics_data_reader : var.enable_log_analytics_reader
+  graph_app_role_values = [
+    "Application.Read.All",
+    "RoleAssignmentSchedule.Read.Directory",
+    "RoleEligibilitySchedule.Read.Directory",
+    "RoleManagement.Read.Directory",
+    "GroupMember.Read.All",
+    "User.Read.All",
+    "AuditLog.Read.All"
+  ]
+  graph_app_role_ids = var.enable_graph_permission ? {
+    for role_value in local.graph_app_role_values : role_value => one([
+      for role in data.azuread_service_principal.msgraph[0].app_roles : role.id
+      if role.value == role_value && contains(role.allowed_member_types, "Application")
+    ])
+  } : {}
+  additional_graph_app_role_ids = {
+    for role_value, role_id in local.graph_app_role_ids : role_value => role_id
+    if role_value != "Application.Read.All"
+  }
   custom_role_scope                           = local.subscription_scopes[0]
   secret_end_date                             = var.client_secret_end_date != null ? var.client_secret_end_date : (var.create_client_secret ? timeadd(time_static.secret_created[0].rfc3339, "8760h") : null)
   reader_role_definition_id                   = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reader.role_definition_id}"
@@ -149,9 +167,13 @@ resource "azuread_application" "spotto" {
     content {
       resource_app_id = "00000003-0000-0000-c000-000000000000"
 
-      resource_access {
-        id   = local.graph_app_role_id
-        type = "Role"
+      dynamic "resource_access" {
+        for_each = local.graph_app_role_ids
+
+        content {
+          id   = resource_access.value
+          type = "Role"
+        }
       }
     }
   }
@@ -190,7 +212,17 @@ resource "azuread_application_password" "spotto" {
 resource "azuread_app_role_assignment" "graph_app_read_all" {
   count = var.enable_graph_permission ? 1 : 0
 
-  app_role_id         = local.graph_app_role_id
+  app_role_id         = local.graph_app_role_ids["Application.Read.All"]
+  principal_object_id = azuread_service_principal.spotto.object_id
+  resource_object_id  = data.azuread_service_principal.msgraph[0].object_id
+
+  depends_on = [time_sleep.sp_propagation]
+}
+
+resource "azuread_app_role_assignment" "graph_additional_permissions" {
+  for_each = local.additional_graph_app_role_ids
+
+  app_role_id         = each.value
   principal_object_id = azuread_service_principal.spotto.object_id
   resource_object_id  = data.azuread_service_principal.msgraph[0].object_id
 

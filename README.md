@@ -4,7 +4,7 @@ Terraform modules for onboarding Azure environments into Spotto.
 
 ## Modules
 
-- `modules/onboarding`: Creates an Azure AD application/service principal, assigns subscription and tenant-level read access for Spotto onboarding and governance collection, grants Microsoft Graph `Application.Read.All` to read applications and service principals for governance and credential posture, can configure Cost Management exports to Azure Storage, optionally assigns Log Analytics Reader for broader workspace analysis, and optionally grants write access for Advisor/Storage Inventory actions.
+- `modules/onboarding`: Creates an Azure AD application/service principal, assigns subscription and tenant-level read access for Spotto onboarding and governance collection, grants Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility, can configure Cost Management exports to Azure Storage, optionally assigns Log Analytics Reader for broader workspace analysis, and optionally grants write access for Advisor/Storage Inventory actions.
 
 ## Requirements
 
@@ -29,7 +29,7 @@ Terraform modules for onboarding Azure environments into Spotto.
   - Billing export storage setup, when enabled, requires permission to create or use the target storage account/container and assign `Storage Blob Data Reader` at the container scope.
   - Global Administrators typically need to enable `Microsoft Entra ID > Properties > Access management for Azure resources`, then sign out and sign back in before applying the tenant root Reader assignment.
 - Management Groups: Management Group Contributor or Owner if you want to create the root management group assignment through the module.
-- Microsoft Graph: Admin consent to grant `Application.Read.All` so Spotto can read applications and service principals for governance and credential posture. This module does not require `Directory.Read.All`.
+- Microsoft Graph: Admin consent to grant application permissions for application inventory, Entra Global Admin/PIM visibility, group membership, user profile, and audit log visibility. This module does not require `Directory.Read.All`.
 
 ## Quickstart
 
@@ -93,7 +93,14 @@ By default, the onboarding module also assigns:
 - `Reservations Reader` at `/providers/Microsoft.Capacity`.
 - `Reservations Contributor` at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows.
 - `Savings plan Reader` at `/providers/Microsoft.BillingBenefits`.
-- Microsoft Graph `Application.Read.All` with admin consent to read applications and service principals for governance and credential posture.
+- Microsoft Graph application permissions with admin consent:
+  - `Application.Read.All`
+  - `RoleAssignmentSchedule.Read.Directory`
+  - `RoleEligibilitySchedule.Read.Directory`
+  - `RoleManagement.Read.Directory`
+  - `GroupMember.Read.All`
+  - `User.Read.All`
+  - `AuditLog.Read.All`
 
 To configure the highly recommended Cost Management exports:
 
@@ -146,7 +153,7 @@ Use a remote backend that supports encryption and access controls (for example, 
 - If `Monitoring Reader` assignments fail in tenant-wide mode, you still need permission to create subscription-level RBAC assignments on the currently resolved subscriptions, or set `enable_monitoring_reader = false`.
 - If `Log Analytics Reader` assignment fails in tenant-wide mode, ensure you can create RBAC assignments on the root management group, or set `enable_log_analytics_reader = false`.
 - If `Reservations Reader`, `Reservations Contributor`, or `Savings plan Reader` assignments fail, ensure you can create RBAC assignments at `/providers/Microsoft.Capacity` and `/providers/Microsoft.BillingBenefits`, or disable them with `enable_reservations_reader = false`, `enable_reservations_contributor = false`, and `enable_savings_plan_reader = false`.
-- If Microsoft Graph permission grants fail, ensure admin consent is allowed for `Application.Read.All` in your tenant. The module intentionally does not request `Directory.Read.All`.
+- If Microsoft Graph permission grants fail, ensure admin consent is allowed for the required Spotto Microsoft Graph application permissions in your tenant. The module intentionally does not request `Directory.Read.All`.
 - If Cost Management exports fail with unsupported dataset or partitioning errors, remove `AmortizedCost` from `billing_export_dataset_types`, set `billing_export_actual_cost_definition_type = "Usage"` for agreements/scopes that do not support `ActualCost`, or set `billing_export_partition_data = false`.
 - If billing export storage access fails, confirm the storage account allows public network access with authenticated access, anonymous blob access is disabled, the container is private, and the Spotto service principal has `Storage Blob Data Reader` on the export container.
 

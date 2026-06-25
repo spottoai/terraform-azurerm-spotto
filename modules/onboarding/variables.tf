@@ -96,7 +96,7 @@ variable "enable_log_analytics_data_reader" {
 }
 
 variable "enable_graph_permission" {
-  description = "Whether to grant Microsoft Graph Application.Read.All so Spotto can read applications and service principals for governance and credential posture."
+  description = "Whether to grant Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility."
   type        = bool
   default     = true
 }
