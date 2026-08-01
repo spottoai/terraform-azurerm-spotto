@@ -44,6 +44,23 @@ output "custom_role_definition_id" {
   value       = try(azurerm_role_definition.spotto_write[0].role_definition_resource_id, null)
 }
 
+output "policy_exemption_permissions_enabled" {
+  description = "Whether subscription-scoped Azure Policy exemption permissions were enabled."
+  value       = var.grant_policy_exemption_permissions
+}
+
+output "policy_assignment_exempt_scopes" {
+  description = "Explicit management-group policy assignment scopes granted the exempt action."
+  value       = sort(tolist(local.policy_assignment_exempt_scopes))
+}
+
+output "policy_assignment_exempt_role_definition_ids" {
+  description = "Role definition resource IDs keyed by explicit management-group policy assignment scope."
+  value = {
+    for scope, role in azurerm_role_definition.policy_assignment_exempt : scope => role.role_definition_resource_id
+  }
+}
+
 output "billing_exports_enabled" {
   description = "Whether Cost Management billing exports were enabled."
   value       = var.enable_billing_exports

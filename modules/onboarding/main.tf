@@ -149,13 +149,20 @@ locals {
       root_folder_path = "${var.billing_export_root_path}/${pair[0].subscription_id}/${pair[0].dataset_folder}/backfill/${pair[1].name}"
     }
   } : {}
-  custom_role_actions = [
+  optional_write_role_enabled = var.grant_optional_write_permissions || var.grant_policy_exemption_permissions
+  custom_role_actions = concat(var.grant_optional_write_permissions ? [
     "Microsoft.Advisor/recommendations/write",
     "Microsoft.Advisor/recommendations/suppressions/write",
     "Microsoft.Advisor/recommendations/suppressions/delete",
     "Microsoft.Storage/storageAccounts/inventoryPolicies/write",
     "Microsoft.Storage/storageAccounts/inventoryPolicies/read"
-  ]
+    ] : [], var.grant_policy_exemption_permissions ? [
+    "Microsoft.Authorization/policyExemptions/write",
+    "Microsoft.Authorization/policyAssignments/exempt/action"
+  ] : [])
+  policy_assignment_exempt_scopes = toset([
+    for scope in var.policy_assignment_exempt_scopes : trimsuffix(trimspace(scope), "/")
+  ])
 }
 
 resource "azuread_application" "spotto" {
@@ -190,6 +197,14 @@ resource "azuread_application" "spotto" {
     precondition {
       condition     = !var.enable_billing_exports || length(local.effective_subscription_ids) > 0
       error_message = "When enable_billing_exports is true, at least one effective subscription must be resolved for Cost Management exports."
+    }
+    precondition {
+      condition     = !local.optional_write_role_enabled || length(local.subscription_scopes) > 0
+      error_message = "When optional write or policy exemption permissions are enabled, at least one effective subscription must be resolved."
+    }
+    precondition {
+      condition     = var.grant_policy_exemption_permissions || length(local.policy_assignment_exempt_scopes) == 0
+      error_message = "policy_assignment_exempt_scopes requires grant_policy_exemption_permissions to be true."
     }
   }
 }
@@ -623,15 +638,15 @@ resource "azapi_resource" "savings_plan_reader" {
 }
 
 resource "random_uuid" "spotto_role" {
-  count = var.grant_optional_write_permissions ? 1 : 0
+  count = local.optional_write_role_enabled ? 1 : 0
 }
 
 resource "azurerm_role_definition" "spotto_write" {
-  count              = var.grant_optional_write_permissions ? 1 : 0
+  count              = local.optional_write_role_enabled ? 1 : 0
   role_definition_id = random_uuid.spotto_role[0].result
   name               = var.custom_role_name
   scope              = local.custom_role_scope
-  description        = "Custom role for Spotto to manage Azure Advisor recommendations and Storage inventory"
+  description        = "Custom role for explicitly selected Spotto subscription write capabilities"
 
   permissions {
     actions = local.custom_role_actions
@@ -641,18 +656,54 @@ resource "azurerm_role_definition" "spotto_write" {
 }
 
 resource "time_sleep" "role_propagation" {
-  count           = var.grant_optional_write_permissions ? 1 : 0
+  count           = local.optional_write_role_enabled ? 1 : 0
   create_duration = var.custom_role_propagation_delay
 
   depends_on = [azurerm_role_definition.spotto_write]
 }
 
 resource "azurerm_role_assignment" "spotto_write" {
-  for_each                         = var.grant_optional_write_permissions ? toset(local.subscription_scopes) : toset([])
+  for_each                         = local.optional_write_role_enabled ? toset(local.subscription_scopes) : toset([])
   scope                            = each.value
   role_definition_id               = azurerm_role_definition.spotto_write[0].role_definition_resource_id
   principal_id                     = azuread_service_principal.spotto.object_id
   skip_service_principal_aad_check = true
 
   depends_on = [time_sleep.role_propagation, time_sleep.sp_propagation]
+}
+
+resource "random_uuid" "policy_assignment_exempt_role" {
+  for_each = local.policy_assignment_exempt_scopes
+}
+
+resource "azurerm_role_definition" "policy_assignment_exempt" {
+  for_each           = local.policy_assignment_exempt_scopes
+  role_definition_id = random_uuid.policy_assignment_exempt_role[each.key].result
+  name               = "${substr(var.policy_assignment_exempt_role_name, 0, 110)} ${substr(sha1(lower(each.key)), 0, 8)}"
+  scope              = each.key
+  description        = "Allows Spotto to exempt explicitly selected inherited Azure Policy assignments"
+
+  permissions {
+    actions = ["Microsoft.Authorization/policyAssignments/exempt/action"]
+  }
+
+  # Azure permits only one management group in a custom role's assignable scopes.
+  assignable_scopes = [each.key]
+}
+
+resource "time_sleep" "policy_assignment_exempt_role_propagation" {
+  for_each        = local.policy_assignment_exempt_scopes
+  create_duration = var.custom_role_propagation_delay
+
+  depends_on = [azurerm_role_definition.policy_assignment_exempt]
+}
+
+resource "azurerm_role_assignment" "policy_assignment_exempt" {
+  for_each                         = local.policy_assignment_exempt_scopes
+  scope                            = each.value
+  role_definition_id               = azurerm_role_definition.policy_assignment_exempt[each.key].role_definition_resource_id
+  principal_id                     = azuread_service_principal.spotto.object_id
+  skip_service_principal_aad_check = true
+
+  depends_on = [time_sleep.policy_assignment_exempt_role_propagation, time_sleep.sp_propagation]
 }

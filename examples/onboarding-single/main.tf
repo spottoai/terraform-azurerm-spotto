@@ -12,6 +12,14 @@ module "spotto_onboarding" {
   # Azure Storage so Spotto can read billing data from exports instead of making
   # repeated Cost Management API calls.
   # enable_billing_exports = true
+
+  # Separate opt-in for narrowly scoped Azure Policy exemption creation.
+  # grant_policy_exemption_permissions = true
+
+  # Add only management groups that own inherited initiative assignments.
+  # policy_assignment_exempt_scopes = [
+  #   "/providers/Microsoft.Management/managementGroups/production"
+  # ]
 }
 
 output "application_client_id" {

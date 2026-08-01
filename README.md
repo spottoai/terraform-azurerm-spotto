@@ -4,7 +4,7 @@ Terraform modules for onboarding Azure environments into Spotto.
 
 ## Modules
 
-- `modules/onboarding`: Creates an Azure AD application/service principal, assigns subscription and tenant-level read access for Spotto onboarding and governance collection, grants Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility, can configure Cost Management exports to Azure Storage, optionally assigns Log Analytics Reader for broader workspace analysis, and optionally grants write access for Advisor/Storage Inventory actions.
+- `modules/onboarding`: Creates an Azure AD application/service principal, assigns subscription and tenant-level read access for Spotto onboarding and governance collection, grants Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility, can configure Cost Management exports to Azure Storage, optionally assigns Log Analytics Reader for broader workspace analysis, and separately opts into write access for Advisor/Storage Inventory actions or Azure Policy exemptions.
 
 ## Requirements
 
@@ -27,8 +27,9 @@ Terraform modules for onboarding Azure environments into Spotto.
   - Monitoring Reader and Log Analytics Reader are optional but recommended for Azure Monitor, Application Insights, and broader Log Analytics coverage.
   - Cost Management export setup, when enabled, requires permission to create/update `Microsoft.CostManagement/exports` on each targeted subscription.
   - Billing export storage setup, when enabled, requires permission to create or use the target storage account/container and assign `Storage Blob Data Reader` at the container scope.
+  - Policy exemption setup, when enabled, requires `Microsoft.Authorization/roleDefinitions/write` and `Microsoft.Authorization/roleAssignments/write` at every targeted subscription and every management group listed in `policy_assignment_exempt_scopes`. Owner or User Access Administrator provides both at the relevant scope; Role Based Access Control Administrator alone is insufficient because it cannot create custom role definitions.
   - Global Administrators typically need to enable `Microsoft Entra ID > Properties > Access management for Azure resources`, then sign out and sign back in before applying the tenant root Reader assignment.
-- Management Groups: Management Group Contributor or Owner if you want to create the root management group assignment through the module.
+- Management Groups: creating root-management-group role assignments requires `Microsoft.Authorization/roleAssignments/write` there, such as Owner, User Access Administrator, or Role Based Access Control Administrator. Management Group Contributor alone cannot assign Azure RBAC access.
 - Microsoft Graph: Admin consent to grant application permissions for application inventory, Entra Global Admin/PIM visibility, group membership, user profile, and audit log visibility. This module does not require `Directory.Read.All`.
 
 ## Quickstart
@@ -118,6 +119,26 @@ When `enable_billing_exports = true`, the module creates or uses a customer-owne
 
 Terraform creates the backfill export definitions by default, but one-time backfill run queueing is opt-in with `enable_billing_export_backfill_runs = true`. Terraform cannot observe whether Azure completed a previous imperative export run, so keep run queueing as an explicit operational choice.
 
+Azure Policy exemption creation is also opt-in and independent of the existing Advisor/Storage write role:
+
+```hcl
+module "spotto_onboarding" {
+  source = "./modules/onboarding"
+
+  subscription_ids                   = ["00000000-0000-0000-0000-000000000000"]
+  grant_policy_exemption_permissions = true
+
+  # Only required for initiatives inherited from these exact management groups.
+  policy_assignment_exempt_scopes = [
+    "/providers/Microsoft.Management/managementGroups/production"
+  ]
+}
+```
+
+No policy write is granted by default. See the onboarding module README for the exact two
+subscription actions and the action-only inherited-assignment role created separately for
+each selected management group.
+
 ## Outputs
 
 The onboarding module outputs:
@@ -130,6 +151,9 @@ The onboarding module outputs:
 - `billing_export_container_id`
 - `billing_export_recurring_export_ids`
 - `billing_export_backfill_export_ids`
+- `policy_exemption_permissions_enabled`
+- `policy_assignment_exempt_scopes`
+- `policy_assignment_exempt_role_definition_ids`
 
 ## Links
 

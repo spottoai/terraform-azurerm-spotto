@@ -1,6 +1,6 @@
 # Onboarding Module
 
-Creates the Azure AD application and service principal used by Spotto, assigns subscription and tenant-level read access for onboarding and governance collection, grants Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility, can configure Cost Management exports to customer-owned Azure Storage, and optionally grants write access for Advisor/Storage Inventory actions.
+Creates the Azure AD application and service principal used by Spotto, assigns subscription and tenant-level read access for onboarding and governance collection, grants Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility, can configure Cost Management exports to customer-owned Azure Storage, and separately opts into write access for Advisor/Storage Inventory actions or Azure Policy exemptions.
 
 ## Spotto Links
 
@@ -92,6 +92,28 @@ When enabled, the module:
 
 The PowerShell onboarding wizard can interactively discover arbitrary compatible existing recurring exports, retry `ActualCost` as `Usage`, and retry without `partitionData` when Azure rejects those settings. Terraform keeps those decisions explicit: import existing export resources if you want Terraform to manage them, remove `AmortizedCost` from `billing_export_dataset_types` if that dataset is unsupported, set `billing_export_actual_cost_definition_type = "Usage"` if the scope does not support `ActualCost`, and set `billing_export_partition_data = false` if the scope does not support partitioned export data.
 
+Azure Policy exemption writes are a separate opt-in and do not change the existing Advisor/Storage choice:
+
+```hcl
+module "spotto_onboarding" {
+  source = "../../modules/onboarding"
+
+  subscription_ids                     = ["00000000-0000-0000-0000-000000000000"]
+  grant_policy_exemption_permissions   = true
+  policy_assignment_exempt_scopes = [
+    "/providers/Microsoft.Management/managementGroups/production"
+  ]
+}
+```
+
+The subscription role receives only `Microsoft.Authorization/policyExemptions/write` and
+`Microsoft.Authorization/policyAssignments/exempt/action`. The management-group list is
+optional and explicit; use it only for scopes where initiatives are inherited. Azure permits
+only one management group in a custom role's assignable scopes, so the module creates one
+deterministic role per selected scope. Each role contains `policyAssignments/exempt/action`
+only. This module does not grant policy
+assignment, definition, remediation, exemption-delete, or tenant-root write access.
+
 ## Permissions Required
 
 - Azure AD: Application Administrator or Global Administrator to create the app and service principal.
@@ -103,8 +125,9 @@ The PowerShell onboarding wizard can interactively discover arbitrary compatible
   - Reservations Contributor at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows.
   - Savings plan Reader at `/providers/Microsoft.BillingBenefits`.
   - Monitoring Reader and Log Analytics Reader are optional but recommended for Azure Monitor, Application Insights, and broader Log Analytics coverage.
+  - Policy exemption setup, when enabled, requires `Microsoft.Authorization/roleDefinitions/write` and `Microsoft.Authorization/roleAssignments/write` at every targeted subscription and every management group listed in `policy_assignment_exempt_scopes`. Owner or User Access Administrator provides both at the relevant scope; Role Based Access Control Administrator alone is insufficient because it cannot create custom role definitions.
   - Global Administrators typically need to enable `Microsoft Entra ID > Properties > Access management for Azure resources`, then sign out and sign back in before applying the tenant root Reader assignment.
-- Management Groups: Management Group Contributor or Owner if you want to create the root management group assignment through the module.
+- Management Groups: creating root-management-group role assignments requires `Microsoft.Authorization/roleAssignments/write` there, such as Owner, User Access Administrator, or Role Based Access Control Administrator. Management Group Contributor alone cannot assign Azure RBAC access.
 - Microsoft Graph: Admin consent to grant application permissions for application inventory, Entra Global Admin/PIM visibility, group membership, user profile, and audit log visibility. This module does not require `Directory.Read.All`.
 - Cost Management exports: Permission to create/update `Microsoft.CostManagement/exports` on each targeted subscription when `enable_billing_exports = true`.
 - Billing export storage: Permission to create or use the selected storage account/container and assign `Storage Blob Data Reader` at the container scope when `enable_billing_exports = true`.
@@ -130,6 +153,9 @@ provider "azuread" {}
 | `app_name` | Display name for the Azure AD application. | `string` | `"Spotto"` | no |
 | `custom_role_name` | Name for the optional custom role used for write permissions. | `string` | `"Spotto Access"` | no |
 | `grant_optional_write_permissions` | Whether to create and assign the optional custom role. | `bool` | `false` | no |
+| `grant_policy_exemption_permissions` | Whether to add least-privilege policy exemption actions at targeted subscriptions. | `bool` | `false` | no |
+| `policy_assignment_exempt_scopes` | Explicit management-group resource IDs for inherited policy assignments. | `set(string)` | `[]` | no |
+| `policy_assignment_exempt_role_name` | Base name of each action-only management-group custom role. | `string` | `"Spotto Policy Assignment Exempt"` | no |
 | `tenant_id` | Optional tenant ID override. Defaults to the current client tenant. | `string` | `null` | no |
 | `root_management_group_id` | Optional management group ID for tenant-level role assignments. Defaults to tenant ID. | `string` | `null` | no |
 | `create_client_secret` | Whether to create a new client secret for the application. | `bool` | `true` | no |
@@ -176,6 +202,9 @@ provider "azuread" {}
 | `subscription_ids` | Subscription IDs resolved for the deployment. In tenant-wide Reader mode, this is the current subscription snapshot, not a limit on inherited root-scope access. |
 | `write_permissions_enabled` | Whether the optional write permissions were enabled. |
 | `custom_role_definition_id` | Role definition resource ID for the optional custom role. |
+| `policy_exemption_permissions_enabled` | Whether subscription-scoped policy exemption permissions were enabled. |
+| `policy_assignment_exempt_scopes` | Explicit management-group scopes granted the assignment exempt action. |
+| `policy_assignment_exempt_role_definition_ids` | Role definition IDs keyed by explicit management-group scope. Azure receives one action-only custom role per scope. |
 | `billing_exports_enabled` | Whether Cost Management billing exports were enabled. |
 | `billing_export_storage_account_id` | Storage account resource ID used for billing exports. |
 | `billing_export_storage_subscription_id` | Subscription ID used for module-created billing export storage. |
@@ -189,6 +218,7 @@ provider "azuread" {}
 - If `client_secret_end_date` is not set, the module uses the initial apply time to set a 12-month secret expiry without rotating on every plan.
 - If you already have an application or custom role, import it instead of creating a duplicate.
 - The optional write-permission custom role remains per-subscription even when `assign_reader_to_all_subscriptions = true`.
+- Policy exemption permissions remain disabled unless `grant_policy_exemption_permissions = true`; clearing the flag and management-group scope set removes only module-owned permission assignments, not existing Azure exemptions.
 - If tenant-wide Reader mode is enabled, `subscription_ids` remains a snapshot of currently resolved subscriptions used by subscription-scoped assignments and outputs.
 - The module requests the Microsoft Graph application permissions listed above for application inventory, Entra Global Admin/PIM visibility, group membership, user profile, and audit log visibility. It does not widen to `Directory.Read.All`.
 - If `enable_billing_exports = true` with tenant-wide Reader mode, export resources are created for the current subscription snapshot; rerun Terraform after new subscriptions are added.

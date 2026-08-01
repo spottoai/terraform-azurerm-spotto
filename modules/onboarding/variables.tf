@@ -58,6 +58,39 @@ variable "enable_management_group_reader" {
   default     = true
 }
 
+variable "grant_policy_exemption_permissions" {
+  description = "Whether to add the least-privilege Azure Policy exemption actions to the subscription-scoped Spotto custom role. This is independent of grant_optional_write_permissions."
+  type        = bool
+  default     = false
+}
+
+variable "policy_assignment_exempt_scopes" {
+  description = "Explicit management-group resource IDs whose inherited policy assignments Spotto may exempt. Empty by default; requires grant_policy_exemption_permissions."
+  type        = set(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for scope in var.policy_assignment_exempt_scopes :
+      can(regex("^/providers/Microsoft\\.Management/managementGroups/[^/]+$", scope))
+    ])
+    error_message = "policy_assignment_exempt_scopes may contain only management-group resource IDs."
+  }
+
+  validation {
+    condition = length(distinct([
+      for scope in var.policy_assignment_exempt_scopes : lower(trimspace(scope))
+    ])) == length(var.policy_assignment_exempt_scopes)
+    error_message = "policy_assignment_exempt_scopes must not contain case-insensitive duplicates."
+  }
+}
+
+variable "policy_assignment_exempt_role_name" {
+  description = "Name for the action-only custom role assigned at explicit management-group policy assignment scopes."
+  type        = string
+  default     = "Spotto Policy Assignment Exempt"
+}
+
 variable "enable_reservations_reader" {
   description = "Whether to assign Reservations Reader at /providers/Microsoft.Capacity."
   type        = bool
