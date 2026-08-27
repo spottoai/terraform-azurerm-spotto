@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added Microsoft Graph `Policy.Read.All` application permission for tenant-policy visibility, aligning Terraform onboarding with the PowerShell onboarding path.
 - Added a separate, disabled-by-default Azure Policy exemption permission option with exact subscription actions and explicit action-only management-group scopes for inherited assignments.
 - Initial onboarding module.
 - Added `Monitoring Reader` and `Log Analytics Data Reader` subscription assignments to the onboarding module.

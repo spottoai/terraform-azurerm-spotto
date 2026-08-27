@@ -4,7 +4,7 @@ Terraform modules for onboarding Azure environments into Spotto.
 
 ## Modules
 
-- `modules/onboarding`: Creates an Azure AD application/service principal, assigns subscription and tenant-level read access for Spotto onboarding and governance collection, grants Microsoft Graph application permissions for application inventory, Entra admin role, PIM, group membership, user profile, and audit log visibility, can configure Cost Management exports to Azure Storage, optionally assigns Log Analytics Reader for broader workspace analysis, and separately opts into write access for Advisor/Storage Inventory actions or Azure Policy exemptions.
+- `modules/onboarding`: Creates an Azure AD application/service principal, assigns subscription and tenant-level read access for Spotto onboarding and governance collection, grants Microsoft Graph application permissions for application inventory, tenant policy, Entra admin role, PIM, group membership, user profile, and audit log visibility, can configure Cost Management exports to Azure Storage, optionally assigns Log Analytics Reader for broader workspace analysis, and separately opts into write access for Advisor/Storage Inventory actions or Azure Policy exemptions.
 
 ## Requirements
 
@@ -30,7 +30,7 @@ Terraform modules for onboarding Azure environments into Spotto.
   - Policy exemption setup, when enabled, requires `Microsoft.Authorization/roleDefinitions/write` and `Microsoft.Authorization/roleAssignments/write` at every targeted subscription and every management group listed in `policy_assignment_exempt_scopes`. Owner or User Access Administrator provides both at the relevant scope; Role Based Access Control Administrator alone is insufficient because it cannot create custom role definitions.
   - Global Administrators typically need to enable `Microsoft Entra ID > Properties > Access management for Azure resources`, then sign out and sign back in before applying the tenant root Reader assignment.
 - Management Groups: creating root-management-group role assignments requires `Microsoft.Authorization/roleAssignments/write` there, such as Owner, User Access Administrator, or Role Based Access Control Administrator. Management Group Contributor alone cannot assign Azure RBAC access.
-- Microsoft Graph: Admin consent to grant application permissions for application inventory, Entra Global Admin/PIM visibility, group membership, user profile, and audit log visibility. This module does not require `Directory.Read.All`.
+- Microsoft Graph: Admin consent to grant application permissions for application inventory, tenant policy, Entra Global Admin/PIM visibility, group membership, user profile, and audit log visibility. This module does not require `Directory.Read.All`.
 
 ## Quickstart
 
@@ -102,6 +102,7 @@ By default, the onboarding module also assigns:
   - `GroupMember.Read.All`
   - `User.Read.All`
   - `AuditLog.Read.All`
+  - `Policy.Read.All`
 
 To configure the highly recommended Cost Management exports:
 
