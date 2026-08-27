@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added Microsoft Graph `LicenseAssignment.Read.All` application permission for subscribed-license coverage used by tenant MFA posture analysis, aligning Terraform onboarding with the PowerShell and cloud-engine permission contract.
 - Added Microsoft Graph `Policy.Read.All` application permission for tenant-policy visibility, aligning Terraform onboarding with the PowerShell onboarding path.
 - Added a separate, disabled-by-default Azure Policy exemption permission option with exact subscription actions and explicit action-only management-group scopes for inherited assignments.
 - Initial onboarding module.

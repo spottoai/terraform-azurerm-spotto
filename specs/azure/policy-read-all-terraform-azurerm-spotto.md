@@ -1,8 +1,8 @@
 ## Metadata
 
 Status: complete
-Approved: Yes — user instruction “fix terraform then too” on 2026-08-28
-Iterations: 1
+Approved: Yes — user instruction “fix terraform then too” on 2026-08-28; `LicenseAssignment.Read.All` approved by “add that permission then to both terraform and this PS script” on 2026-08-28
+Iterations: 2
 Last updated: 2026-08-28
 Repo: terraform-azurerm-spotto
 Domain: azure
@@ -11,12 +11,13 @@ Spec location: specs/azure/policy-read-all-terraform-azurerm-spotto.md
 
 ## Summary
 
-Bring Terraform onboarding into parity with the PowerShell onboarding path by granting the explicitly requested Microsoft Graph application permission `Policy.Read.All` for tenant-policy visibility.
+Keep Terraform onboarding in parity with the PowerShell and cloud-engine permission contract by granting the explicitly requested Microsoft Graph application permissions for tenant-policy and subscribed-license visibility.
 
 ## Scope (Repo-Specific)
 
 In scope:
 - Add `Policy.Read.All` to the existing Microsoft Graph application-role allowlist.
+- Add `LicenseAssignment.Read.All` to the same allowlist for `/subscribedSkus` coverage used by tenant MFA posture analysis.
 - Keep application-role IDs dynamically resolved from the Microsoft Graph service principal.
 - Update root/module documentation and the changelog.
 - Verify formatting, Terraform configuration validity, and permission parity.
@@ -33,6 +34,7 @@ Out of scope:
 ## Assumptions and Constraints (Post-Recon)
 
 - [x] `Policy.Read.All` is an application permission requiring admin consent (validated against Microsoft Learn).
+- [x] `LicenseAssignment.Read.All` is the least-privileged application permission for `GET /subscribedSkus` (validated against Microsoft Learn).
 - [x] The module already resolves every configured Graph role by value and assigns all roles other than the separately named `Application.Read.All` resource through `graph_additional_permissions`.
 - Existing module inputs/outputs must remain backward compatible.
 
@@ -43,7 +45,7 @@ Out of scope:
 
 ## Decision
 
-Add `Policy.Read.All` to `local.graph_app_role_values`; the existing required-resource-access and app-role-assignment loops will wire it consistently with the other Graph governance permissions.
+Add `Policy.Read.All` and `LicenseAssignment.Read.All` to `local.graph_app_role_values`; the existing required-resource-access and app-role-assignment loops wire them consistently with the other Graph governance permissions.
 
 ## Deferred Ideas
 
@@ -52,14 +54,16 @@ Add `Policy.Read.All` to `local.graph_app_role_values`; the existing required-re
 
 ## Success Criteria (Repo)
 
-- Terraform and PowerShell onboarding declare the same eight Microsoft Graph application permissions.
+- Terraform and PowerShell onboarding declare the same nine Microsoft Graph application permissions.
 - `Policy.Read.All` flows into both `required_resource_access` and `azuread_app_role_assignment.graph_additional_permissions` through the existing maps.
 - No `Policy.ReadWrite*` permission is introduced.
+- No license, directory, or application write permission is introduced into the managed Spotto app-role set.
 - Both READMEs and the changelog describe tenant-policy visibility.
 
 ## Cross-Repo Touchpoints
 
-- `spotto-tools` is the parity source for the eight-permission Graph governance allowlist; no files in that repo change here.
+- `spotto-tools` is the paired onboarding implementation and parity source for the nine-permission Graph governance allowlist.
+- `cloud-engine` consumes `/subscribedSkus` for tenant MFA posture and establishes the `LicenseAssignment.Read.All` requirement.
 
 ## Local Recon
 
@@ -78,9 +82,9 @@ Add `Policy.Read.All` to `local.graph_app_role_values`; the existing required-re
 
 1. Add Graph permission parity
    Files: `modules/onboarding/main.tf`
-   Action: Add `Policy.Read.All` to `local.graph_app_role_values`; retain dynamic lookup and existing assignment loops.
+   Action: Add `Policy.Read.All` and `LicenseAssignment.Read.All` to `local.graph_app_role_values`; retain dynamic lookup and existing assignment loops.
    Verify: Exact allowlist comparison reports no difference from `spotto-tools`; scan excludes `Policy.ReadWrite*`.
-   Done: The map contains eight unique application permissions and includes `Policy.Read.All`.
+   Done: The map contains nine unique application permissions and includes `Policy.Read.All` and `LicenseAssignment.Read.All`.
 2. Update permission documentation
    Files: `README.md`, `modules/onboarding/README.md`, `modules/onboarding/variables.tf`, `CHANGELOG.md`
    Action: Add tenant-policy visibility and list `Policy.Read.All` alongside existing Graph permissions.
@@ -132,7 +136,7 @@ Add `Policy.Read.All` to `local.graph_app_role_values`; the existing required-re
 
 ## Security Considerations
 
-- Data access: adds read-only access to organizational policy data exposed by Microsoft Graph.
+- Data access: adds read-only access to organizational policy and subscribed-license data exposed by Microsoft Graph.
 - Auth/authz: application permission requires tenant administrator consent; no write permission is added.
 - Secrets/dependencies: unchanged.
 
@@ -146,12 +150,13 @@ Add `Policy.Read.All` to `local.graph_app_role_values`; the existing required-re
 
 - https://learn.microsoft.com/en-us/graph/permissions-reference
 - https://learn.microsoft.com/en-us/graph/api/adminconsentrequestpolicy-get?view=graph-rest-1.0
+- https://learn.microsoft.com/en-us/graph/api/subscribedsku-list?view=graph-rest-1.0
 - `C:/VersionControlGitHub/spotto/spotto-tools/onboarding/azure/Setup-SpottoAzure.ps1`
 
 ## Verification Evidence
 
 - `terraform fmt -check -recursive` passed.
 - Isolated `terraform init -backend=false` and `terraform validate` passed with the module copied to a system temporary directory.
-- Exact cross-repo comparison found eight matching, unique Graph application permissions.
+- Exact cross-repo comparison found nine matching, unique Graph application permissions, including `LicenseAssignment.Read.All`.
 - `git diff --check` passed; policy write-permission and secret scans found no additions.
 - Live `terraform plan/apply` remains intentionally deferred because it requires customer tenant credentials and would propose or create tenant resources.
