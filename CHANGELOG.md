@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fixed provider-backed plans by canonicalizing full built-in role definition IDs and making initial backfill instance keys plan-known.
+- Prevented deterministic naming from replacing existing module-created billing storage, added migration-safe management-group RBAC moves, and documented the one-time backfill state-key migration.
+- Removed implicit tenant-root Azure Reader from targeted subscription onboarding while retaining Management Group Reader hierarchy/authorization metadata and subscription Key Vault coverage.
+- Existing storage network widening and existing-source Blob Data Reader are now separate explicit authorization choices; handoff inputs and provider tenants are validated against the portal/API contract.
+- Preserved the calendar-keyed backfill output contract, added a stable-key companion output, and decoupled portal handoff limits from Azure export provisioning for large estates.
+- Protected policy/customer storage tags from removal after creation and added explicit large-backfill/provider-registration operational guidance.
+- Split the onboarding implementation into focused identity, billing export, and RBAC files and raised the minimum Terraform version to 1.5.
+- Aligned the onboarding module with the PowerShell Recommended profile: Key Vault Reader is enabled, management-group Monitoring Reader can cover explicit visible groups, and Reservations Contributor is now opt-in.
+- Added PowerShell-compatible application ownership tags and deterministic, tenant-tagged billing export storage naming for new storage while retaining existing state-recorded names.
+- Added explicit management-group EA Usage exports and declarative reuse of unmanaged billing-, management-group-, and subscription-scope recurring exports with opt-in container-level Blob Data Reader.
+- Added the sensitive versioned `azure_manual_onboarding_json` portal handoff output, including managed and explicitly reused billing source locators.
+- Disabled imperative recurring export runs by default because AzAPI resource actions repeat on subsequent applies; backfill runs remain opt-in.
+- Added Terraform-native mock-provider parity tests for permissions, billing exports, storage ownership, and the portal handoff contract.
+- Added an enabled-by-default `Security Reader` assignment on each targeted subscription for Defender for Cloud assessments, secure score, and security posture.
 - Added Microsoft Graph `LicenseAssignment.Read.All` application permission for subscribed-license coverage used by tenant MFA posture analysis, aligning Terraform onboarding with the PowerShell and cloud-engine permission contract.
 - Added Microsoft Graph `Policy.Read.All` application permission for tenant-policy visibility, aligning Terraform onboarding with the PowerShell onboarding path.
 - Added a separate, disabled-by-default Azure Policy exemption permission option with exact subscription actions and explicit action-only management-group scopes for inherited assignments.

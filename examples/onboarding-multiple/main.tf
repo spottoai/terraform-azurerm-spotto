@@ -26,3 +26,8 @@ output "client_secret" {
   value     = module.spotto_onboarding.client_secret
   sensitive = true
 }
+
+output "azure_manual_onboarding_json" {
+  value     = module.spotto_onboarding.azure_manual_onboarding_json
+  sensitive = true
+}

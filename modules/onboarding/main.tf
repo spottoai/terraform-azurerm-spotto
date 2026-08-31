@@ -1,5 +1,9 @@
 data "azurerm_client_config" "current" {}
 
+data "azuread_client_config" "current" {}
+
+data "azapi_client_config" "current" {}
+
 data "azurerm_subscriptions" "current" {
   count = var.assign_reader_to_all_subscriptions ? 1 : 0
 }
@@ -26,16 +30,28 @@ data "azuread_service_principal" "msgraph" {
 }
 
 locals {
-  tenant_id                   = coalesce(var.tenant_id, data.azurerm_client_config.current.tenant_id)
-  tenant_root_scope           = "/"
-  reservations_scope          = "/providers/Microsoft.Capacity"
-  savings_plan_scope          = "/providers/Microsoft.BillingBenefits"
-  management_group_id         = coalesce(var.root_management_group_id, local.tenant_id)
-  management_group_scope      = "/providers/Microsoft.Management/managementGroups/${local.management_group_id}"
-  all_subscription_ids        = var.assign_reader_to_all_subscriptions ? [for sub in data.azurerm_subscriptions.current[0].subscriptions : sub.subscription_id] : []
-  effective_subscription_ids  = var.assign_reader_to_all_subscriptions ? local.all_subscription_ids : var.subscription_ids
-  subscription_scopes         = [for id in local.effective_subscription_ids : "/subscriptions/${id}"]
-  enable_log_analytics_reader = var.enable_log_analytics_data_reader != null ? var.enable_log_analytics_data_reader : var.enable_log_analytics_reader
+  tenant_id                      = coalesce(var.tenant_id, data.azurerm_client_config.current.tenant_id)
+  normalized_tenant_id           = replace(lower(local.tenant_id), "-", "")
+  tenant_root_scope              = "/"
+  reservations_scope             = "/providers/Microsoft.Capacity"
+  savings_plan_scope             = "/providers/Microsoft.BillingBenefits"
+  default_management_group_id    = coalesce(var.root_management_group_id, local.tenant_id)
+  effective_management_group_ids = length(var.management_group_ids) > 0 ? var.management_group_ids : toset([local.default_management_group_id])
+  management_group_scope_map = length(var.management_group_ids) > 0 ? {
+    for id in var.management_group_ids : "management-group:${lower(id)}" => "/providers/Microsoft.Management/managementGroups/${id}"
+    } : {
+    default = "/providers/Microsoft.Management/managementGroups/${local.default_management_group_id}"
+  }
+  extended_management_group_scope_map = var.assign_reader_to_all_subscriptions || length(var.management_group_ids) > 0 ? local.management_group_scope_map : {}
+  extended_management_group_scopes    = toset(values(local.extended_management_group_scope_map))
+  all_subscription_ids                = var.assign_reader_to_all_subscriptions ? [for sub in data.azurerm_subscriptions.current[0].subscriptions : sub.subscription_id] : []
+  effective_subscription_ids          = var.assign_reader_to_all_subscriptions ? local.all_subscription_ids : var.subscription_ids
+  subscription_scopes                 = [for id in local.effective_subscription_ids : "/subscriptions/${id}"]
+  enable_log_analytics_reader         = var.enable_log_analytics_data_reader != null ? var.enable_log_analytics_data_reader : var.enable_log_analytics_reader
+  spotto_application_tags = toset([
+    "SpottoAzureOnboarding",
+    "SpottoTenantId:${local.tenant_id}"
+  ])
   graph_app_role_values = [
     "Application.Read.All",
     "RoleAssignmentSchedule.Read.Directory",
@@ -57,12 +73,13 @@ locals {
     for role_value, role_id in local.graph_app_role_ids : role_value => role_id
     if role_value != "Application.Read.All"
   }
-  custom_role_scope                           = local.subscription_scopes[0]
+  custom_role_scope                           = try(local.subscription_scopes[0], null)
   secret_end_date                             = var.client_secret_end_date != null ? var.client_secret_end_date : (var.create_client_secret ? timeadd(time_static.secret_created[0].rfc3339, "8760h") : null)
-  reader_role_definition_id                   = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reader.role_definition_id}"
-  reservations_reader_role_definition_id      = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reservations_reader.role_definition_id}"
-  reservations_contributor_role_definition_id = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.reservations_contributor.role_definition_id}"
-  savings_plan_reader_role_definition_id      = "/providers/Microsoft.Authorization/roleDefinitions/${data.azurerm_role_definition.savings_plan_reader.role_definition_id}"
+  role_definition_base                        = "/providers/Microsoft.Authorization/roleDefinitions"
+  reader_role_definition_id                   = "${local.role_definition_base}/${basename(trimsuffix(data.azurerm_role_definition.reader.role_definition_id, "/"))}"
+  reservations_reader_role_definition_id      = "${local.role_definition_base}/${basename(trimsuffix(data.azurerm_role_definition.reservations_reader.role_definition_id, "/"))}"
+  reservations_contributor_role_definition_id = "${local.role_definition_base}/${basename(trimsuffix(data.azurerm_role_definition.reservations_contributor.role_definition_id, "/"))}"
+  savings_plan_reader_role_definition_id      = "${local.role_definition_base}/${basename(trimsuffix(data.azurerm_role_definition.savings_plan_reader.role_definition_id, "/"))}"
   root_reader_assignment_name                 = uuidv5("url", "${local.tenant_root_scope}|${local.reader_role_definition_id}|${azuread_service_principal.spotto.object_id}")
   reservations_assignment_name                = uuidv5("url", "${local.reservations_scope}|${local.reservations_reader_role_definition_id}|${azuread_service_principal.spotto.object_id}")
   reservations_contributor_assignment_name    = uuidv5("url", "${local.reservations_scope}|${local.reservations_contributor_role_definition_id}|${azuread_service_principal.spotto.object_id}")
@@ -82,9 +99,20 @@ locals {
   billing_export_storage_account_id = var.enable_billing_exports ? (
     var.create_billing_export_storage_account ? azapi_resource.billing_export_storage_account[0].id : var.billing_export_storage_account_id
   ) : null
+  billing_export_storage_account_requested_name = var.create_billing_export_storage_account || var.billing_export_storage_account_id == null ? (
+    var.billing_export_storage_account_name != null ? var.billing_export_storage_account_name : "billingexports${substr(local.normalized_tenant_id, length(local.normalized_tenant_id) - 10, 10)}"
+  ) : split("/", var.billing_export_storage_account_id)[8]
+  billing_export_storage_account_name = !var.enable_billing_exports ? null : (
+    var.create_billing_export_storage_account ? azapi_resource.billing_export_storage_account[0].name : split("/", var.billing_export_storage_account_id)[8]
+  )
+  billing_export_storage_tags = {
+    SpottoPurpose  = "BillingExports"
+    SpottoTenantId = local.tenant_id
+    spotto         = "billing-exports"
+  }
   existing_billing_export_storage_subscription_id = var.billing_export_storage_account_id != null ? split("/", var.billing_export_storage_account_id)[2] : null
   billing_export_storage_subscription_id = coalesce(
-    var.billing_export_storage_subscription_id,
+    var.create_billing_export_storage_account ? var.billing_export_storage_subscription_id : local.existing_billing_export_storage_subscription_id,
     var.create_billing_export_storage_account ? try(local.effective_subscription_ids[0], data.azurerm_client_config.current.subscription_id) : local.existing_billing_export_storage_subscription_id,
     data.azurerm_client_config.current.subscription_id
   )
@@ -130,27 +158,122 @@ locals {
       root_folder_path      = "${var.billing_export_root_path}/${pair[0]}/${local.billing_export_dataset_config[pair[1]].dataset_folder}/recurring"
     }
   } : {}
-  billing_backfill_periods = var.enable_billing_exports && var.enable_billing_export_backfill ? [
-    for index in range(var.billing_export_backfill_month_count) : {
-      name = formatdate("YYYYMM", time_offset.billing_backfill_period_start[index].rfc3339)
-      from = time_offset.billing_backfill_period_start[index].rfc3339
-      to   = time_offset.billing_backfill_period_end[index].rfc3339
+  billing_export_management_group_recurring_exports = var.enable_billing_exports ? {
+    for management_group_id in var.billing_export_management_group_ids : management_group_id => {
+      management_group_id   = management_group_id
+      scope                 = "/providers/Microsoft.Management/managementGroups/${management_group_id}"
+      dataset_type          = "Usage"
+      dataset_folder        = "actual"
+      recurring_export_name = "spotto-usage-daily"
+      root_folder_path      = "${var.billing_export_root_path}/management-groups/${management_group_id}/actual/recurring"
     }
-  ] : []
+  } : {}
+  billing_backfill_month_keys = var.enable_billing_exports && var.enable_billing_export_backfill ? toset([
+    for months_ago in range(1, var.billing_export_backfill_month_count + 1) : format("%02d", months_ago)
+  ]) : toset([])
   billing_export_backfill_exports = var.enable_billing_exports && var.enable_billing_export_backfill ? {
-    for pair in setproduct(values(local.billing_export_recurring_exports), local.billing_backfill_periods) :
-    "${pair[0].subscription_id}|${pair[0].dataset_type}|${pair[1].name}" => {
+    for pair in setproduct(values(local.billing_export_recurring_exports), local.billing_backfill_month_keys) :
+    "${pair[0].subscription_id}|${pair[0].dataset_type}|months-ago-${pair[1]}" => {
       subscription_id  = pair[0].subscription_id
       dataset_type     = pair[0].dataset_type
       definition_type  = pair[0].definition_type
       dataset_folder   = pair[0].dataset_folder
-      period_name      = pair[1].name
-      from             = pair[1].from
-      to               = pair[1].to
-      export_name      = "spotto-${pair[0].dataset_folder}-backfill-${pair[1].name}"
-      root_folder_path = "${var.billing_export_root_path}/${pair[0].subscription_id}/${pair[0].dataset_folder}/backfill/${pair[1].name}"
+      period_name      = formatdate("YYYYMM", time_offset.billing_backfill_period_start[pair[1]].rfc3339)
+      from             = time_offset.billing_backfill_period_start[pair[1]].rfc3339
+      to               = time_offset.billing_backfill_period_end[pair[1]].rfc3339
+      export_name      = "spotto-${pair[0].dataset_folder}-backfill-${formatdate("YYYYMM", time_offset.billing_backfill_period_start[pair[1]].rfc3339)}"
+      root_folder_path = "${var.billing_export_root_path}/${pair[0].subscription_id}/${pair[0].dataset_folder}/backfill/${formatdate("YYYYMM", time_offset.billing_backfill_period_start[pair[1]].rfc3339)}"
     }
   } : {}
+  managed_subscription_billing_export_sources = [
+    for export in values(local.billing_export_recurring_exports) : {
+      datasetType = export.dataset_folder
+      scopeType   = "subscription"
+      scopePath   = "/subscriptions/${export.subscription_id}"
+      exportName  = export.recurring_export_name
+      destination = {
+        storageAccountName = local.billing_export_storage_account_name
+        container          = var.billing_export_container_name
+        rootFolderPath     = export.root_folder_path
+      }
+    }
+  ]
+  managed_management_group_billing_export_sources = [
+    for export in values(local.billing_export_management_group_recurring_exports) : {
+      datasetType = "actual"
+      scopeType   = "managementGroup"
+      scopePath   = export.scope
+      exportName  = export.recurring_export_name
+      destination = {
+        storageAccountName = local.billing_export_storage_account_name
+        container          = var.billing_export_container_name
+        rootFolderPath     = export.root_folder_path
+      }
+    }
+  ]
+  existing_billing_export_sources = [
+    for source in var.existing_billing_export_sources : {
+      datasetType = source.dataset_type
+      scopeType   = source.scope_type
+      scopePath   = trimsuffix(trimspace(source.scope_path), "/")
+      exportName  = trimspace(source.export_name)
+      destination = {
+        storageAccountName = split("/", source.storage_account_id)[8]
+        container          = lower(source.container_name)
+        rootFolderPath     = trim(trimspace(source.root_folder_path), "/")
+      }
+    }
+  ]
+  azure_manual_onboarding_billing_export_sources = concat(
+    local.managed_subscription_billing_export_sources,
+    local.managed_management_group_billing_export_sources,
+    local.existing_billing_export_sources
+  )
+  azure_manual_onboarding_billing_export_source_identities = [
+    for source in local.azure_manual_onboarding_billing_export_sources : lower(
+      "${source.datasetType}|${source.scopeType}|${source.scopePath}|${source.exportName}"
+    )
+  ]
+  azure_manual_onboarding_billing_exports_within_count_limit = length(local.azure_manual_onboarding_billing_export_sources) <= 50
+  azure_manual_onboarding_billing_exports_within_size_limit = length(base64encode(jsonencode({
+    sources = local.azure_manual_onboarding_billing_export_sources
+  }))) <= 32768
+  azure_manual_onboarding_billing_exports_eligible = (
+    local.azure_manual_onboarding_billing_exports_within_count_limit &&
+    local.azure_manual_onboarding_billing_exports_within_size_limit
+  )
+  azure_manual_onboarding_credentials = merge(
+    {
+      tenantId = local.tenant_id
+      clientId = azuread_application.spotto.client_id
+    },
+    var.create_client_secret ? {
+      clientSecret          = azuread_application_password.spotto[0].value
+      clientSecretExpiresAt = formatdate("YYYY-MM-DD", azuread_application_password.spotto[0].end_date)
+    } : {}
+  )
+  azure_manual_onboarding_payload = merge(
+    {
+      schemaVersion = 1
+      kind          = "spotto.azure.manual-onboarding"
+      credentials   = local.azure_manual_onboarding_credentials
+    },
+    length(local.azure_manual_onboarding_billing_export_sources) > 0 && local.azure_manual_onboarding_billing_exports_eligible ? {
+      billingExports = {
+        sources = local.azure_manual_onboarding_billing_export_sources
+      }
+    } : {}
+  )
+  existing_billing_export_container_scopes = toset([
+    for source in var.existing_billing_export_sources :
+    "${source.storage_account_id}/blobServices/default/containers/${source.container_name}"
+    if var.grant_existing_billing_export_storage_reader && !(
+      var.enable_billing_exports &&
+      !var.create_billing_export_storage_account &&
+      lower(source.storage_account_id) == try(lower(var.billing_export_storage_account_id), "") &&
+      lower(source.container_name) == lower(var.billing_export_container_name)
+    )
+  ])
   optional_write_role_enabled = var.grant_optional_write_permissions || var.grant_policy_exemption_permissions
   custom_role_actions = concat(var.grant_optional_write_permissions ? [
     "Microsoft.Advisor/recommendations/write",
@@ -169,6 +292,7 @@ locals {
 
 resource "azuread_application" "spotto" {
   display_name = var.app_name
+  tags         = local.spotto_application_tags
 
   dynamic "required_resource_access" {
     for_each = var.enable_graph_permission ? [1] : []
@@ -197,6 +321,14 @@ resource "azuread_application" "spotto" {
       error_message = "When enable_billing_exports is true and create_billing_export_storage_account is false, provide billing_export_storage_account_id."
     }
     precondition {
+      condition = (
+        var.create_billing_export_storage_account ||
+        var.billing_export_storage_subscription_id == null ||
+        lower(var.billing_export_storage_subscription_id) == lower(local.existing_billing_export_storage_subscription_id)
+      )
+      error_message = "When using existing billing export storage, billing_export_storage_subscription_id must be omitted or match the subscription in billing_export_storage_account_id."
+    }
+    precondition {
       condition     = !var.enable_billing_exports || length(local.effective_subscription_ids) > 0
       error_message = "When enable_billing_exports is true, at least one effective subscription must be resolved for Cost Management exports."
     }
@@ -205,8 +337,34 @@ resource "azuread_application" "spotto" {
       error_message = "When optional write or policy exemption permissions are enabled, at least one effective subscription must be resolved."
     }
     precondition {
+      condition = (
+        lower(local.tenant_id) == lower(data.azurerm_client_config.current.tenant_id) &&
+        lower(local.tenant_id) == lower(data.azuread_client_config.current.tenant_id) &&
+        lower(local.tenant_id) == lower(data.azapi_client_config.current.tenant_id)
+      )
+      error_message = "tenant_id and the AzureRM, AzureAD, and AzAPI provider tenants must match. Cross-tenant onboarding is not supported."
+    }
+    precondition {
       condition     = var.grant_policy_exemption_permissions || length(local.policy_assignment_exempt_scopes) == 0
       error_message = "policy_assignment_exempt_scopes requires grant_policy_exemption_permissions to be true."
+    }
+    precondition {
+      condition     = length(local.normalized_tenant_id) >= 10
+      error_message = "The effective tenant ID must contain at least 10 alphanumeric characters for deterministic billing storage naming."
+    }
+    precondition {
+      condition     = length(distinct(local.azure_manual_onboarding_billing_export_source_identities)) == length(local.azure_manual_onboarding_billing_export_source_identities)
+      error_message = "Managed and existing billing export sources must not contain duplicate dataset, scope, and export identities."
+    }
+    precondition {
+      condition = alltrue([
+        for source in local.azure_manual_onboarding_billing_export_sources :
+        length(source.destination.rootFolderPath) > 0 &&
+        length(source.destination.rootFolderPath) <= 1024 &&
+        can(regex("^[^%\\\\?#\\x00-\\x1F\\x7F]+$", source.destination.rootFolderPath)) &&
+        alltrue([for segment in split("/", source.destination.rootFolderPath) : length(segment) > 0 && !contains([".", ".."], segment)])
+      ])
+      error_message = "Every billing export source must produce a non-empty portal-safe root folder path of at most 1024 characters."
     }
   }
 }
@@ -220,10 +378,10 @@ resource "time_static" "secret_created" {
 }
 
 resource "azuread_application_password" "spotto" {
-  count                 = var.create_client_secret ? 1 : 0
-  application_object_id = azuread_application.spotto.object_id
-  display_name          = "spotto-onboarding"
-  end_date              = local.secret_end_date
+  count          = var.create_client_secret ? 1 : 0
+  application_id = azuread_application.spotto.id
+  display_name   = "spotto-onboarding"
+  end_date       = local.secret_end_date
 }
 
 resource "azuread_app_role_assignment" "graph_app_read_all" {
@@ -250,462 +408,4 @@ resource "time_sleep" "sp_propagation" {
   create_duration = var.service_principal_propagation_delay
 
   depends_on = [azuread_service_principal.spotto]
-}
-
-resource "time_static" "billing_exports_created" {
-  count = var.enable_billing_exports ? 1 : 0
-}
-
-resource "time_offset" "billing_backfill_period_start" {
-  count = var.enable_billing_exports && var.enable_billing_export_backfill ? var.billing_export_backfill_month_count : 0
-
-  base_rfc3339  = "${formatdate("YYYY-MM", time_static.billing_exports_created[0].rfc3339)}-01T00:00:00Z"
-  offset_months = -var.billing_export_backfill_month_count + count.index
-}
-
-resource "time_offset" "billing_backfill_period_end" {
-  count = var.enable_billing_exports && var.enable_billing_export_backfill ? var.billing_export_backfill_month_count : 0
-
-  base_rfc3339   = "${formatdate("YYYY-MM", time_static.billing_exports_created[0].rfc3339)}-01T00:00:00Z"
-  offset_months  = -var.billing_export_backfill_month_count + count.index + 1
-  offset_seconds = -1
-}
-
-resource "random_string" "billing_export_storage_account" {
-  count = var.enable_billing_exports && var.create_billing_export_storage_account && var.billing_export_storage_account_name == null ? 1 : 0
-
-  length  = 13
-  lower   = true
-  numeric = true
-  special = false
-  upper   = false
-}
-
-resource "azapi_resource_action" "billing_export_provider_registration" {
-  for_each = local.billing_export_provider_registrations
-
-  type        = "Microsoft.Resources/providers@2021-04-01"
-  resource_id = "/subscriptions/${each.value.subscription_id}/providers/${each.value.namespace}"
-  action      = "register"
-  method      = "POST"
-  body        = {}
-}
-
-resource "azapi_resource" "billing_export_resource_group" {
-  count = var.enable_billing_exports && var.create_billing_export_storage_account ? 1 : 0
-
-  type      = "Microsoft.Resources/resourceGroups@2021-04-01"
-  name      = var.billing_export_resource_group_name
-  parent_id = "/subscriptions/${local.billing_export_storage_subscription_id}"
-  location  = var.billing_export_location
-}
-
-resource "azapi_resource" "billing_export_storage_account" {
-  count = var.enable_billing_exports && var.create_billing_export_storage_account ? 1 : 0
-
-  type      = "Microsoft.Storage/storageAccounts@2023-05-01"
-  name      = var.billing_export_storage_account_name != null ? var.billing_export_storage_account_name : "spotto${random_string.billing_export_storage_account[0].result}"
-  parent_id = azapi_resource.billing_export_resource_group[0].id
-  location  = var.billing_export_location
-
-  body = {
-    kind = "StorageV2"
-    sku = {
-      name = "Standard_LRS"
-    }
-    properties = {
-      accessTier                   = "Hot"
-      allowBlobPublicAccess        = false
-      minimumTlsVersion            = "TLS1_2"
-      publicNetworkAccess          = "Enabled"
-      supportsHttpsTrafficOnly     = true
-      defaultToOAuthAuthentication = false
-      networkAcls = {
-        bypass              = "AzureServices"
-        defaultAction       = "Allow"
-        ipRules             = []
-        resourceAccessRules = []
-        virtualNetworkRules = []
-      }
-    }
-  }
-
-  depends_on = [azapi_resource_action.billing_export_provider_registration]
-}
-
-resource "azapi_update_resource" "billing_export_storage_account_settings" {
-  count = var.enable_billing_exports && var.manage_billing_export_storage_account_settings ? 1 : 0
-
-  type        = "Microsoft.Storage/storageAccounts@2023-05-01"
-  resource_id = local.billing_export_storage_account_id
-
-  body = {
-    properties = {
-      allowBlobPublicAccess    = false
-      minimumTlsVersion        = "TLS1_2"
-      publicNetworkAccess      = "Enabled"
-      supportsHttpsTrafficOnly = true
-      networkAcls = {
-        bypass              = "AzureServices"
-        defaultAction       = "Allow"
-        ipRules             = []
-        resourceAccessRules = []
-        virtualNetworkRules = []
-      }
-    }
-  }
-
-  depends_on = [
-    azapi_resource.billing_export_storage_account,
-    azapi_resource_action.billing_export_provider_registration
-  ]
-}
-
-resource "azapi_resource" "billing_export_container" {
-  count = var.enable_billing_exports ? 1 : 0
-
-  type      = "Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01"
-  name      = var.billing_export_container_name
-  parent_id = "${local.billing_export_storage_account_id}/blobServices/default"
-
-  body = {
-    properties = {
-      publicAccess = "None"
-    }
-  }
-
-  depends_on = [
-    azapi_resource.billing_export_storage_account,
-    azapi_update_resource.billing_export_storage_account_settings
-  ]
-}
-
-resource "azurerm_role_assignment" "billing_export_storage_reader" {
-  count = var.enable_billing_exports ? 1 : 0
-
-  scope                            = azapi_resource.billing_export_container[0].id
-  role_definition_name             = "Storage Blob Data Reader"
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azapi_resource" "billing_export_recurring" {
-  for_each = local.billing_export_recurring_exports
-
-  type      = "Microsoft.CostManagement/exports@2025-03-01"
-  name      = each.value.recurring_export_name
-  parent_id = "/subscriptions/${each.value.subscription_id}"
-
-  body = {
-    properties = {
-      format                = "Csv"
-      compressionMode       = "gzip"
-      dataOverwriteBehavior = "OverwritePreviousReport"
-      partitionData         = var.billing_export_partition_data
-      definition = {
-        type      = each.value.definition_type
-        timeframe = "MonthToDate"
-        dataSet = {
-          granularity = "Daily"
-        }
-      }
-      deliveryInfo = {
-        destination = {
-          type           = "AzureBlob"
-          resourceId     = local.billing_export_storage_account_id
-          container      = var.billing_export_container_name
-          rootFolderPath = each.value.root_folder_path
-        }
-      }
-      schedule = {
-        status     = "Active"
-        recurrence = "Daily"
-        recurrencePeriod = {
-          from = local.billing_export_schedule_from
-          to   = local.billing_export_schedule_to
-        }
-      }
-    }
-  }
-
-  schema_validation_enabled = false
-
-  depends_on = [
-    azapi_resource_action.billing_export_provider_registration,
-    azurerm_role_assignment.billing_export_storage_reader
-  ]
-}
-
-resource "azapi_resource_action" "billing_export_recurring_run" {
-  for_each = var.enable_billing_exports && var.enable_billing_export_immediate_runs ? local.billing_export_recurring_exports : {}
-
-  type        = "Microsoft.CostManagement/exports@2025-03-01"
-  resource_id = azapi_resource.billing_export_recurring[each.key].id
-  action      = "run"
-  method      = "POST"
-  body        = {}
-}
-
-resource "azapi_resource" "billing_export_backfill" {
-  for_each = local.billing_export_backfill_exports
-
-  type      = "Microsoft.CostManagement/exports@2025-03-01"
-  name      = each.value.export_name
-  parent_id = "/subscriptions/${each.value.subscription_id}"
-
-  body = {
-    properties = {
-      format                = "Csv"
-      compressionMode       = "gzip"
-      dataOverwriteBehavior = "OverwritePreviousReport"
-      partitionData         = var.billing_export_partition_data
-      exportDescription     = var.enable_billing_export_backfill_runs ? "Spotto backfill queued ${each.value.period_name}" : "Spotto backfill pending ${each.value.period_name}"
-      definition = {
-        type      = each.value.definition_type
-        timeframe = "Custom"
-        timePeriod = {
-          from = each.value.from
-          to   = each.value.to
-        }
-        dataSet = {
-          granularity = "Daily"
-        }
-      }
-      deliveryInfo = {
-        destination = {
-          type           = "AzureBlob"
-          resourceId     = local.billing_export_storage_account_id
-          container      = var.billing_export_container_name
-          rootFolderPath = each.value.root_folder_path
-        }
-      }
-      schedule = {
-        status = "Inactive"
-      }
-    }
-  }
-
-  schema_validation_enabled = false
-
-  depends_on = [
-    azapi_resource_action.billing_export_provider_registration,
-    azurerm_role_assignment.billing_export_storage_reader
-  ]
-}
-
-resource "azapi_resource_action" "billing_export_backfill_run" {
-  for_each = var.enable_billing_exports && var.enable_billing_export_backfill && var.enable_billing_export_backfill_runs ? local.billing_export_backfill_exports : {}
-
-  type        = "Microsoft.CostManagement/exports@2025-03-01"
-  resource_id = azapi_resource.billing_export_backfill[each.key].id
-  action      = "run"
-  method      = "POST"
-
-  body = {
-    timePeriod = {
-      from = each.value.from
-      to   = each.value.to
-    }
-  }
-}
-
-resource "azurerm_role_assignment" "reader" {
-  for_each                         = var.assign_reader_to_all_subscriptions ? toset([]) : toset(local.subscription_scopes)
-  scope                            = each.value
-  role_definition_name             = "Reader"
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azapi_resource" "reader_root" {
-  count     = var.assign_reader_to_all_subscriptions ? 1 : 0
-  type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
-  name      = local.root_reader_assignment_name
-  parent_id = local.tenant_root_scope
-
-  body = {
-    properties = {
-      principalId      = azuread_service_principal.spotto.object_id
-      principalType    = "ServicePrincipal"
-      roleDefinitionId = local.reader_role_definition_id
-    }
-  }
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azurerm_role_assignment" "monitoring_reader" {
-  for_each                         = var.enable_monitoring_reader ? toset(local.subscription_scopes) : toset([])
-  scope                            = each.value
-  role_definition_name             = "Monitoring Reader"
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azurerm_role_assignment" "log_analytics_reader_subscription" {
-  for_each                         = local.enable_log_analytics_reader && !var.assign_reader_to_all_subscriptions ? toset(local.subscription_scopes) : toset([])
-  scope                            = each.value
-  role_definition_name             = "Log Analytics Reader"
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azurerm_role_assignment" "log_analytics_reader_management_group" {
-  count                            = local.enable_log_analytics_reader && var.assign_reader_to_all_subscriptions ? 1 : 0
-  scope                            = local.management_group_scope
-  role_definition_name             = "Log Analytics Reader"
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azurerm_role_assignment" "reader_management_group" {
-  count                            = var.enable_management_group_reader ? 1 : 0
-  scope                            = local.management_group_scope
-  role_definition_name             = "Reader"
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azurerm_role_assignment" "management_group_reader" {
-  count                            = var.enable_management_group_reader ? 1 : 0
-  scope                            = local.management_group_scope
-  role_definition_name             = "Management Group Reader"
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azapi_resource" "reservations_reader" {
-  count     = var.enable_reservations_reader ? 1 : 0
-  type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
-  name      = local.reservations_assignment_name
-  parent_id = local.reservations_scope
-
-  body = {
-    properties = {
-      principalId      = azuread_service_principal.spotto.object_id
-      principalType    = "ServicePrincipal"
-      roleDefinitionId = local.reservations_reader_role_definition_id
-    }
-  }
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azapi_resource" "reservations_contributor" {
-  count     = var.enable_reservations_contributor ? 1 : 0
-  type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
-  name      = local.reservations_contributor_assignment_name
-  parent_id = local.reservations_scope
-
-  body = {
-    properties = {
-      principalId      = azuread_service_principal.spotto.object_id
-      principalType    = "ServicePrincipal"
-      roleDefinitionId = local.reservations_contributor_role_definition_id
-    }
-  }
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "azapi_resource" "savings_plan_reader" {
-  count     = var.enable_savings_plan_reader ? 1 : 0
-  type      = "Microsoft.Authorization/roleAssignments@2022-04-01"
-  name      = local.savings_plan_assignment_name
-  parent_id = local.savings_plan_scope
-
-  body = {
-    properties = {
-      principalId      = azuread_service_principal.spotto.object_id
-      principalType    = "ServicePrincipal"
-      roleDefinitionId = local.savings_plan_reader_role_definition_id
-    }
-  }
-
-  depends_on = [time_sleep.sp_propagation]
-}
-
-resource "random_uuid" "spotto_role" {
-  count = local.optional_write_role_enabled ? 1 : 0
-}
-
-resource "azurerm_role_definition" "spotto_write" {
-  count              = local.optional_write_role_enabled ? 1 : 0
-  role_definition_id = random_uuid.spotto_role[0].result
-  name               = var.custom_role_name
-  scope              = local.custom_role_scope
-  description        = "Custom role for explicitly selected Spotto subscription write capabilities"
-
-  permissions {
-    actions = local.custom_role_actions
-  }
-
-  assignable_scopes = local.subscription_scopes
-}
-
-resource "time_sleep" "role_propagation" {
-  count           = local.optional_write_role_enabled ? 1 : 0
-  create_duration = var.custom_role_propagation_delay
-
-  depends_on = [azurerm_role_definition.spotto_write]
-}
-
-resource "azurerm_role_assignment" "spotto_write" {
-  for_each                         = local.optional_write_role_enabled ? toset(local.subscription_scopes) : toset([])
-  scope                            = each.value
-  role_definition_id               = azurerm_role_definition.spotto_write[0].role_definition_resource_id
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.role_propagation, time_sleep.sp_propagation]
-}
-
-resource "random_uuid" "policy_assignment_exempt_role" {
-  for_each = local.policy_assignment_exempt_scopes
-}
-
-resource "azurerm_role_definition" "policy_assignment_exempt" {
-  for_each           = local.policy_assignment_exempt_scopes
-  role_definition_id = random_uuid.policy_assignment_exempt_role[each.key].result
-  name               = "${substr(var.policy_assignment_exempt_role_name, 0, 110)} ${substr(sha1(lower(each.key)), 0, 8)}"
-  scope              = each.key
-  description        = "Allows Spotto to exempt explicitly selected inherited Azure Policy assignments"
-
-  permissions {
-    actions = ["Microsoft.Authorization/policyAssignments/exempt/action"]
-  }
-
-  # Azure permits only one management group in a custom role's assignable scopes.
-  assignable_scopes = [each.key]
-}
-
-resource "time_sleep" "policy_assignment_exempt_role_propagation" {
-  for_each        = local.policy_assignment_exempt_scopes
-  create_duration = var.custom_role_propagation_delay
-
-  depends_on = [azurerm_role_definition.policy_assignment_exempt]
-}
-
-resource "azurerm_role_assignment" "policy_assignment_exempt" {
-  for_each                         = local.policy_assignment_exempt_scopes
-  scope                            = each.value
-  role_definition_id               = azurerm_role_definition.policy_assignment_exempt[each.key].role_definition_resource_id
-  principal_id                     = azuread_service_principal.spotto.object_id
-  skip_service_principal_aad_check = true
-
-  depends_on = [time_sleep.policy_assignment_exempt_role_propagation, time_sleep.sp_propagation]
 }

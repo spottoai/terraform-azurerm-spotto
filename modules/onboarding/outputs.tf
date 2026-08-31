@@ -34,6 +34,11 @@ output "subscription_ids" {
   value       = local.effective_subscription_ids
 }
 
+output "management_group_ids" {
+  description = "Management group IDs used for governance role assignments."
+  value       = sort(tolist(local.effective_management_group_ids))
+}
+
 output "write_permissions_enabled" {
   description = "Whether the optional write permissions were enabled."
   value       = var.grant_optional_write_permissions
@@ -87,6 +92,30 @@ output "billing_export_recurring_export_ids" {
 }
 
 output "billing_export_backfill_export_ids" {
-  description = "Cost Management backfill export resource IDs keyed by subscription ID, dataset type, and period."
+  description = "Cost Management backfill export resource IDs keyed by subscription ID, dataset type, and calendar period (YYYYMM), preserving the pre-1.1 output contract."
+  value = {
+    for stable_key, export in local.billing_export_backfill_exports :
+    "${export.subscription_id}|${export.dataset_type}|${export.period_name}" => azapi_resource.billing_export_backfill[stable_key].id
+  }
+}
+
+output "billing_export_backfill_export_stable_ids" {
+  description = "Cost Management backfill export resource IDs keyed by subscription ID, dataset type, and stable months-ago period."
   value       = { for key, export in azapi_resource.billing_export_backfill : key => export.id }
+}
+
+output "billing_export_management_group_export_ids" {
+  description = "Cost Management Usage recurring export resource IDs keyed by management group ID."
+  value       = { for key, export in azapi_resource.billing_export_management_group_recurring : key => export.id }
+}
+
+output "azure_manual_onboarding_json" {
+  description = "Versioned Spotto portal manual-onboarding JSON. Billing sources are omitted when they exceed the portal count or size limit; check azure_manual_onboarding_billing_exports_eligible. Sensitive because it contains the generated client secret when create_client_secret is true."
+  value       = jsonencode(local.azure_manual_onboarding_payload)
+  sensitive   = true
+}
+
+output "azure_manual_onboarding_billing_exports_eligible" {
+  description = "Whether all configured billing export sources fit the portal handoff limit of 50 sources and 24 KiB. Azure resources remain independently manageable when false."
+  value       = local.azure_manual_onboarding_billing_exports_eligible
 }

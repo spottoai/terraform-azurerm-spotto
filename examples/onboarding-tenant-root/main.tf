@@ -7,9 +7,14 @@ module "spotto_onboarding" {
   # but do not want to require subscription-scoped or provider-scoped RBAC. Management-group
   # assignments remain enabled by default; disable enable_management_group_reader and
   # enable_log_analytics_reader too if you cannot create root management group assignments.
-  enable_monitoring_reader   = false
-  enable_reservations_reader = false
-  enable_savings_plan_reader = false
+  enable_monitoring_reader                  = false
+  enable_management_group_monitoring_reader = false
+  enable_security_reader                    = false
+  enable_log_analytics_reader               = false
+  enable_key_vault_reader                   = false
+  enable_management_group_reader            = false
+  enable_reservations_reader                = false
+  enable_savings_plan_reader                = false
 
   # Optional, highly recommended. In tenant-wide Reader mode this creates exports
   # for the current subscription snapshot; rerun Terraform after adding future
@@ -27,5 +32,10 @@ output "tenant_id" {
 
 output "client_secret" {
   value     = module.spotto_onboarding.client_secret
+  sensitive = true
+}
+
+output "azure_manual_onboarding_json" {
+  value     = module.spotto_onboarding.azure_manual_onboarding_json
   sensitive = true
 }
