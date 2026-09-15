@@ -35,6 +35,16 @@ resource "azurerm_role_assignment" "monitoring_reader" {
   depends_on = [time_sleep.sp_propagation]
 }
 
+resource "azapi_resource_action" "security_provider_registration" {
+  for_each = var.enable_security_resource_provider_registration ? toset(local.effective_subscription_ids) : toset([])
+
+  type        = "Microsoft.Resources/providers@2021-04-01"
+  resource_id = "/subscriptions/${each.value}/providers/Microsoft.Security"
+  action      = "register"
+  method      = "POST"
+  body        = {}
+}
+
 resource "azurerm_role_assignment" "security_reader" {
   for_each                         = var.enable_security_reader ? toset(local.subscription_scopes) : toset([])
   scope                            = each.value

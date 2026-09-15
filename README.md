@@ -25,6 +25,7 @@ Terraform modules for onboarding Azure environments into Spotto.
   - Optional Reservations Contributor at `/providers/Microsoft.Capacity` for reservation refund quotes and management workflows.
   - Savings plan Reader at `/providers/Microsoft.BillingBenefits`.
   - Monitoring Reader, Log Analytics Reader, Security Reader, and Key Vault Reader are enabled by default for Azure Monitor, Application Insights, Log Analytics, Defender for Cloud posture, and vault expiry metadata.
+  - Optional `Microsoft.Security` resource provider registration requires `Microsoft.Resources/subscriptions/providers/register/action` on every targeted subscription. Contributor and Owner include this action.
   - Cost Management export setup, when enabled, requires permission to create/update `Microsoft.CostManagement/exports` on each targeted subscription.
   - Billing export storage setup, when enabled, requires permission to create or use the target storage account/container and assign `Storage Blob Data Reader` at the container scope.
   - Policy exemption setup, when enabled, requires `Microsoft.Authorization/roleDefinitions/write` and `Microsoft.Authorization/roleAssignments/write` at every targeted subscription and every management group listed in `policy_assignment_exempt_scopes`. Owner or User Access Administrator provides both at the relevant scope; Role Based Access Control Administrator alone is insufficient because it cannot create custom role definitions.
@@ -191,6 +192,8 @@ The onboarding module outputs:
 - The module requires the AzureRM, AzureAD, and AzAPI provider tenants and optional `tenant_id` assertion to match; cross-tenant onboarding is not supported.
 - Terraform cannot automatically recover from a failed tenant-root role assignment during the same apply. Set `management_group_ids` and/or use `subscription_ids` explicitly when root access is unavailable.
 
+Set `enable_security_resource_provider_registration = true` to request `Microsoft.Security` registration on every currently resolved subscription. Terraform resource actions cannot treat an Azure authorization failure as best effort, so this is disabled by default. Enable it only when the applying identity has `Microsoft.Resources/subscriptions/providers/register/action`; a rejected request fails the apply.
+
 ## State & Backend Guidance
 
 Use a remote backend that supports encryption and access controls (for example, Azure Storage with RBAC) because the state includes the client secret.
@@ -202,6 +205,7 @@ Use a remote backend that supports encryption and access controls (for example, 
 - If management-group role assignment fails, provide accessible child IDs through `management_group_ids`, or disable the relevant `enable_management_group_reader`, `enable_management_group_monitoring_reader`, `enable_log_analytics_reader`, or `enable_key_vault_reader` flag.
 - If `Monitoring Reader` assignments fail in tenant-wide mode, you still need permission on the currently resolved subscriptions and effective management groups, or must disable the corresponding monitoring flags.
 - If `Security Reader` assignments fail, ensure you can create subscription-level RBAC assignments on the targeted subscriptions, or set `enable_security_reader = false`.
+- If `Microsoft.Security` registration fails, grant the applying identity `Microsoft.Resources/subscriptions/providers/register/action` on every targeted subscription, or leave `enable_security_resource_provider_registration = false` and register the provider through another onboarding path.
 - If `Log Analytics Reader` assignment fails in tenant-wide mode, ensure you can create RBAC assignments on the root management group, or set `enable_log_analytics_reader = false`.
 - If `Key Vault Reader` assignment fails, ensure you can assign it at the effective management-group or targeted subscription scopes, or set `enable_key_vault_reader = false`.
 - If `Reservations Reader`, `Reservations Contributor`, or `Savings plan Reader` assignments fail, ensure you can create RBAC assignments at `/providers/Microsoft.Capacity` and `/providers/Microsoft.BillingBenefits`, or disable them with `enable_reservations_reader = false`, `enable_reservations_contributor = false`, and `enable_savings_plan_reader = false`.

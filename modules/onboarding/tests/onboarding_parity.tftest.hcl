@@ -250,6 +250,11 @@ run "recommended_defaults_are_least_privilege" {
   }
 
   assert {
+    condition     = length(azapi_resource_action.security_provider_registration) == 0
+    error_message = "Microsoft.Security registration must remain opt-in because Terraform cannot suppress an authorization failure from the registration action."
+  }
+
+  assert {
     condition = local.graph_app_role_values == [
       "Application.Read.All",
       "RoleAssignmentSchedule.Read.Directory",
@@ -270,6 +275,32 @@ run "recommended_defaults_are_least_privilege" {
       "SpottoTenantId:11111111-2222-3333-4444-555555555555"
     ])
     error_message = "The application must carry the PowerShell-compatible Spotto ownership tags."
+  }
+}
+
+run "security_provider_registration_is_explicit" {
+  command = plan
+
+  variables {
+    subscription_ids = [
+      "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+    ]
+    create_client_secret                           = false
+    enable_graph_permission                        = false
+    enable_security_resource_provider_registration = true
+  }
+
+  assert {
+    condition = length(azapi_resource_action.security_provider_registration) == 2 && alltrue([
+      for subscription_id in var.subscription_ids : (
+        azapi_resource_action.security_provider_registration[subscription_id].resource_id == "/subscriptions/${subscription_id}/providers/Microsoft.Security" &&
+        azapi_resource_action.security_provider_registration[subscription_id].type == "Microsoft.Resources/providers@2021-04-01" &&
+        azapi_resource_action.security_provider_registration[subscription_id].action == "register" &&
+        azapi_resource_action.security_provider_registration[subscription_id].method == "POST"
+      )
+    ])
+    error_message = "Explicit Microsoft.Security registration must request the correct ARM action on every targeted subscription."
   }
 }
 

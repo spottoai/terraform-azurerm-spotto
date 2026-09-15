@@ -166,6 +166,7 @@ assignment, definition, remediation, exemption-delete, or tenant-root write acce
   - Reservations Contributor at `/providers/Microsoft.Capacity` only when explicitly enabled for reservation refund quotes and management workflows.
   - Savings plan Reader at `/providers/Microsoft.BillingBenefits`.
   - Monitoring Reader, Log Analytics Reader, and Security Reader are enabled by default for Azure Monitor, Application Insights, broader Log Analytics, and Defender for Cloud posture coverage.
+  - Optional `Microsoft.Security` resource provider registration requires `Microsoft.Resources/subscriptions/providers/register/action` on every targeted subscription. Contributor and Owner include this action.
   - Policy exemption setup, when enabled, requires `Microsoft.Authorization/roleDefinitions/write` and `Microsoft.Authorization/roleAssignments/write` at every targeted subscription and every management group listed in `policy_assignment_exempt_scopes`. Owner or User Access Administrator provides both at the relevant scope; Role Based Access Control Administrator alone is insufficient because it cannot create custom role definitions.
   - Global Administrators typically need to enable `Microsoft Entra ID > Properties > Access management for Azure resources`, then sign out and sign back in before applying the tenant root Reader assignment.
 - Management Groups: creating root-management-group role assignments requires `Microsoft.Authorization/roleAssignments/write` there, such as Owner, User Access Administrator, or Role Based Access Control Administrator. Management Group Contributor alone cannot assign Azure RBAC access.
@@ -184,6 +185,8 @@ provider "azapi" {}
 
 provider "azuread" {}
 ```
+
+Set `enable_security_resource_provider_registration = true` to request `Microsoft.Security` registration on every targeted subscription. Terraform resource actions cannot suppress Azure authorization failures, so this is disabled by default and requires `Microsoft.Resources/subscriptions/providers/register/action` on every target.
 
 ## Inputs
 
@@ -210,6 +213,7 @@ provider "azuread" {}
 | `enable_savings_plan_reader` | Whether to assign Savings plan Reader at `/providers/Microsoft.BillingBenefits`. | `bool` | `true` | no |
 | `enable_monitoring_reader` | Whether to assign Monitoring Reader on each targeted subscription. | `bool` | `true` | no |
 | `enable_security_reader` | Whether to assign Security Reader on each targeted subscription for Defender for Cloud assessments and security posture. | `bool` | `true` | no |
+| `enable_security_resource_provider_registration` | Whether to request `Microsoft.Security` registration on each targeted subscription. Azure authorization failures fail the apply, so enable this only for an identity with provider-registration permission. | `bool` | `false` | no |
 | `enable_log_analytics_reader` | Whether to assign Log Analytics Reader at tenant-wide/explicit management groups and targeted subscriptions as applicable. | `bool` | `true` | no |
 | `enable_log_analytics_data_reader` | Deprecated alias for `enable_log_analytics_reader`. When set, this value overrides the new variable. | `bool` | `null` | no |
 | `enable_graph_permission` | Whether to grant Microsoft Graph application permissions for application inventory, tenant policy, subscribed licensing, Entra admin role, PIM, group membership, user profile, and audit log visibility. | `bool` | `true` | no |

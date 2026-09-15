@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added explicit opt-in `Microsoft.Security` resource provider registration on every targeted subscription so authorized operators can enable Defender for Cloud secure score APIs without breaking restricted Terraform applies.
 - Fixed provider-backed plans by canonicalizing full built-in role definition IDs and making initial backfill instance keys plan-known.
 - Prevented deterministic naming from replacing existing module-created billing storage, added migration-safe management-group RBAC moves, and documented the one-time backfill state-key migration.
 - Removed implicit tenant-root Azure Reader from targeted subscription onboarding while retaining Management Group Reader hierarchy/authorization metadata and subscription Key Vault coverage.

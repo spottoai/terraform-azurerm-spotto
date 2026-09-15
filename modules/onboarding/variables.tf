@@ -181,6 +181,12 @@ variable "enable_security_reader" {
   default     = true
 }
 
+variable "enable_security_resource_provider_registration" {
+  description = "Whether to request Microsoft.Security registration on each targeted subscription. This requires Microsoft.Resources/subscriptions/providers/register/action and fails the apply when Azure rejects the request."
+  type        = bool
+  default     = false
+}
+
 variable "enable_log_analytics_reader" {
   description = "Whether to assign Log Analytics Reader. Tenant-wide mode uses effective management-group scopes; targeted mode uses subscriptions and also any explicit management_group_ids."
   type        = bool
