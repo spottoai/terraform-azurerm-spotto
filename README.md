@@ -8,7 +8,7 @@ Terraform modules for onboarding Azure environments into Spotto.
 
 ## Requirements
 
-- Terraform >= 1.5
+- Terraform >= 1.12.0
 - `hashicorp/azurerm` provider
 - `Azure/azapi` provider
 - `hashicorp/azuread` provider

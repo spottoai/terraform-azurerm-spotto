@@ -16,3 +16,7 @@ terraform.rc
 # OS/editor
 .DS_Store
 Thumbs.db
+
+# Claude Code: personal settings and local skill links (see ../core/scripts/link-agent-skills.mjs)
+.claude/settings.local.json
+.claude/skills/

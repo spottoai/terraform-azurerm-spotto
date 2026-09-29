@@ -5,7 +5,7 @@ Owner: Platform
 # Usage & Deployment
 
 ## Requirements
-- Terraform >= 1.5
+- Terraform >= 1.12.0
 - `hashicorp/azurerm` provider
 - `Azure/azapi` provider
 - `hashicorp/azuread` provider

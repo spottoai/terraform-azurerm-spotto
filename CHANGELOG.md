@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Raised the minimum Terraform version to 1.12.0 because optional input validation and preconditions rely on logical short-circuiting.
 - Added explicit opt-in `Microsoft.Security` resource provider registration on every targeted subscription so authorized operators can enable Defender for Cloud secure score APIs without breaking restricted Terraform applies.
 - Fixed provider-backed plans by canonicalizing full built-in role definition IDs and making initial backfill instance keys plan-known.
 - Prevented deterministic naming from replacing existing module-created billing storage, added migration-safe management-group RBAC moves, and documented the one-time backfill state-key migration.
@@ -9,7 +10,7 @@
 - Existing storage network widening and existing-source Blob Data Reader are now separate explicit authorization choices; handoff inputs and provider tenants are validated against the portal/API contract.
 - Preserved the calendar-keyed backfill output contract, added a stable-key companion output, and decoupled portal handoff limits from Azure export provisioning for large estates.
 - Protected policy/customer storage tags from removal after creation and added explicit large-backfill/provider-registration operational guidance.
-- Split the onboarding implementation into focused identity, billing export, and RBAC files and raised the minimum Terraform version to 1.5.
+- Split the onboarding implementation into focused identity, billing export, and RBAC files.
 - Aligned the onboarding module with the PowerShell Recommended profile: Key Vault Reader is enabled, management-group Monitoring Reader can cover explicit visible groups, and Reservations Contributor is now opt-in.
 - Added PowerShell-compatible application ownership tags and deterministic, tenant-tagged billing export storage naming for new storage while retaining existing state-recorded names.
 - Added explicit management-group EA Usage exports and declarative reuse of unmanaged billing-, management-group-, and subscription-scope recurring exports with opt-in container-level Blob Data Reader.

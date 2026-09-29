@@ -1,6 +1,6 @@
 ---
 name: terraform-azurerm-spotto-architecture
-description: Repo-specific architecture for Spotto Azure onboarding Terraform modules.
+description: Architecture of the Terraform modules that onboard customer Azure environments into Spotto (app registrations, service principals, role assignments). Use when changing module inputs or outputs, required permissions, examples, or the Terraform onboarding flow.
 ---
 
 Status: living
