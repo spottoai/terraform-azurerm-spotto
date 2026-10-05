@@ -61,7 +61,8 @@ locals {
     "User.Read.All",
     "AuditLog.Read.All",
     "Policy.Read.All",
-    "LicenseAssignment.Read.All"
+    "LicenseAssignment.Read.All",
+    "Reports.Read.All"
   ]
   graph_app_role_ids = var.enable_graph_permission ? {
     for role_value in local.graph_app_role_values : role_value => one([

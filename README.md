@@ -113,6 +113,9 @@ By default, the onboarding module also assigns:
   - `AuditLog.Read.All`
   - `Policy.Read.All`
   - `LicenseAssignment.Read.All`
+  - `Reports.Read.All`
+
+Recommended Graph defaults include license capacity/assignments, enabled/disabled user metadata, successful-sign-in recency and Microsoft 365/Copilot usage reports. These are tenant-wide read capabilities; they do not grant mailbox/document contents or license changes. Existing installations add missing roles only after an authorized Terraform apply. Set `enable_graph_permission = false` to retain the existing Graph opt-out. Report access alone does not enable a Spotto report collector or provide customer seat prices.
 
 To configure the highly recommended Cost Management exports:
 

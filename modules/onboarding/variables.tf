@@ -201,7 +201,7 @@ variable "enable_log_analytics_data_reader" {
 }
 
 variable "enable_graph_permission" {
-  description = "Whether to grant Microsoft Graph application permissions for application inventory, tenant policy, subscribed licensing, Entra admin role, PIM, group membership, user profile, and audit log visibility."
+  description = "Whether to grant tenant-wide Microsoft Graph read-only application permissions for application inventory, tenant policy, license capacity/assignments, Entra admin role, PIM, group membership, user account metadata, audit/sign-in activity, and Microsoft 365/Copilot usage reports."
   type        = bool
   default     = true
 }
